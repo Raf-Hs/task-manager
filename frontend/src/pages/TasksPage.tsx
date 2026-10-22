@@ -2,7 +2,10 @@ import { useState } from 'react'
 import { TaskForm } from '../components/TaskForm'
 import { TaskList } from '../components/TaskList'
 import { TaskFilters } from '../components/TaskFilters'
+import { TaskSearch } from '../components/TaskSearch'
+import { TaskSort } from '../components/TaskSort'
 import { TaskStats } from '../components/TaskStats'
+import { Pagination } from '../components/Pagination'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { NotificationList } from '../components/NotificationList'
 import { useTasks } from '../hooks/useTasks'
@@ -26,6 +29,14 @@ export function TasksPage() {
     setFilter,
     priorityFilter,
     setPriorityFilter,
+    search,
+    setSearch,
+    sort,
+    setSort,
+    page,
+    setPage,
+    totalElements,
+    totalPages,
     createTask,
     updateTask,
     toggleTask,
@@ -36,6 +47,10 @@ export function TasksPage() {
 
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null)
+
+  // When there are no results the message changes: the list is not empty,
+  // the current filters are just too restrictive.
+  const isFiltered = filter !== 'ALL' || priorityFilter !== 'ALL' || search.trim() !== ''
 
   async function handleSubmit(input: TaskInput) {
     if (editingTask) {
@@ -94,12 +109,17 @@ export function TasksPage() {
         <main className="layout__content">
           <TaskStats statistics={statistics} />
 
+          <div className="toolbar">
+            <TaskSearch value={search} onChange={setSearch} />
+            <TaskSort value={sort} onChange={setSort} />
+          </div>
+
           <TaskFilters
             activeFilter={filter}
             onChange={setFilter}
             activePriority={priorityFilter}
             onPriorityChange={setPriorityFilter}
-            total={tasks.length}
+            total={totalElements}
           />
 
           {error && (
@@ -115,6 +135,19 @@ export function TasksPage() {
             onToggle={handleToggle}
             onEdit={(task) => setEditingTask(task)}
             onDelete={(task) => setTaskToDelete(task)}
+            emptyTitle={isFiltered ? 'No matching tasks' : 'No tasks yet'}
+            emptyText={
+              isFiltered
+                ? 'Try another search or a different filter.'
+                : 'Create your first task with the form on the left.'
+            }
+          />
+
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalElements={totalElements}
+            onPageChange={setPage}
           />
         </main>
       </div>

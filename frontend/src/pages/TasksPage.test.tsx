@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { AxiosError } from 'axios'
 import { TasksPage } from './TasksPage'
 import * as taskService from '../services/taskService'
-import type { Task, TaskStatistics } from '../types/task'
+import type { PagedResponse, Task, TaskStatistics } from '../types/task'
 
 vi.mock('../services/taskService')
 
@@ -40,6 +40,19 @@ const statistics: TaskStatistics = {
   completionPercentage: 50,
 }
 
+/** Builds the page of results returned by the API. */
+function pageOf(tasks: Task[], totalElements = tasks.length): PagedResponse<Task> {
+  return {
+    content: tasks,
+    page: 0,
+    size: 10,
+    totalElements,
+    totalPages: Math.ceil(totalElements / 10),
+    first: true,
+    last: true,
+  }
+}
+
 /** Builds a real AxiosError so `getErrorMessage` can read the response body. */
 function apiError(message: string, status = 400): AxiosError {
   return new AxiosError('Request failed', 'ERR_BAD_REQUEST', undefined, undefined, {
@@ -63,7 +76,7 @@ function cardOf(title: string): HTMLElement {
 describe('TasksPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockedService.fetchTasks.mockResolvedValue([pendingTask, completedTask])
+    mockedService.fetchTasks.mockResolvedValue(pageOf([pendingTask, completedTask]))
     mockedService.fetchStatistics.mockResolvedValue(statistics)
     mockedService.createTask.mockResolvedValue(pendingTask)
     mockedService.updateTask.mockResolvedValue(pendingTask)
@@ -184,7 +197,9 @@ describe('TasksPage', () => {
     await user.click(within(filters).getByRole('button', { name: /^pending$/i }))
 
     await waitFor(() =>
-      expect(mockedService.fetchTasks).toHaveBeenCalledWith({ status: 'PENDING', priority: 'ALL' }),
+      expect(mockedService.fetchTasks).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'PENDING' }),
+      ),
     )
   })
 
@@ -196,7 +211,97 @@ describe('TasksPage', () => {
     await user.selectOptions(screen.getByLabelText(/filter tasks by priority/i), 'HIGH')
 
     await waitFor(() =>
-      expect(mockedService.fetchTasks).toHaveBeenCalledWith({ status: 'ALL', priority: 'HIGH' }),
+      expect(mockedService.fetchTasks).toHaveBeenCalledWith(
+        expect.objectContaining({ priority: 'HIGH' }),
+      ),
+    )
+  })
+
+  it('requests the tasks again when the sort criterion changes', async () => {
+    const user = userEvent.setup()
+    render(<TasksPage />)
+    await screen.findByText('Buy milk')
+
+    await user.selectOptions(screen.getByLabelText(/sort tasks by/i), 'TITLE')
+
+    await waitFor(() =>
+      expect(mockedService.fetchTasks).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'TITLE' }),
+      ),
+    )
+  })
+
+  it('searches the tasks when the user stops typing', async () => {
+    const user = userEvent.setup()
+    render(<TasksPage />)
+    await screen.findByText('Buy milk')
+
+    await user.type(screen.getByLabelText(/search tasks/i), 'milk')
+
+    await waitFor(
+      () =>
+        expect(mockedService.fetchTasks).toHaveBeenCalledWith(
+          expect.objectContaining({ search: 'milk' }),
+        ),
+      { timeout: 2000 },
+    )
+  })
+
+  it('clears the search when the clear button is pressed', async () => {
+    const user = userEvent.setup()
+    render(<TasksPage />)
+    await screen.findByText('Buy milk')
+
+    await user.type(screen.getByLabelText(/search tasks/i), 'milk')
+    await waitFor(
+      () =>
+        expect(mockedService.fetchTasks).toHaveBeenCalledWith(
+          expect.objectContaining({ search: 'milk' }),
+        ),
+      { timeout: 2000 },
+    )
+
+    await user.click(screen.getByRole('button', { name: /clear the search/i }))
+
+    await waitFor(
+      () =>
+        expect(mockedService.fetchTasks).toHaveBeenCalledWith(
+          expect.objectContaining({ search: '' }),
+        ),
+      { timeout: 2000 },
+    )
+  })
+
+  it('shows the pagination controls when there is more than one page', async () => {
+    mockedService.fetchTasks.mockResolvedValue({
+      ...pageOf([pendingTask]),
+      totalElements: 25,
+      totalPages: 3,
+    })
+
+    render(<TasksPage />)
+    await screen.findByText('Buy milk')
+
+    const pagination = await screen.findByRole('navigation', { name: /pagination/i })
+    expect(within(pagination).getByText(/page 1 of 3/i)).toBeInTheDocument()
+  })
+
+  it('asks for the next page when the user clicks on Next', async () => {
+    const user = userEvent.setup()
+    mockedService.fetchTasks.mockResolvedValue({
+      ...pageOf([pendingTask]),
+      totalElements: 25,
+      totalPages: 3,
+    })
+
+    render(<TasksPage />)
+    await screen.findByText('Buy milk')
+
+    const pagination = await screen.findByRole('navigation', { name: /pagination/i })
+    await user.click(within(pagination).getByRole('button', { name: /next/i }))
+
+    await waitFor(() =>
+      expect(mockedService.fetchTasks).toHaveBeenCalledWith(expect.objectContaining({ page: 1 })),
     )
   })
 

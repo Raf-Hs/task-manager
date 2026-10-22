@@ -1,8 +1,10 @@
 import { apiClient } from './api'
 import type {
+  PagedResponse,
   Task,
   TaskInput,
   TaskPriorityFilter,
+  TaskSortOption,
   TaskStatistics,
   TaskStatus,
 } from '../types/task'
@@ -14,24 +16,40 @@ import type {
  * the API contract lives in a single module.
  */
 
-/** Filters accepted by the list endpoint. */
-export interface TaskListFilters {
+/** Query accepted by the list endpoint. Every field is optional. */
+export interface TaskListQuery {
   status?: TaskStatus
   priority?: TaskPriorityFilter
+  search?: string
+  sort?: TaskSortOption
+  page?: number
+  size?: number
 }
 
-/** Lists the tasks, optionally filtered by status and priority. */
-export async function fetchTasks(filters: TaskListFilters = {}): Promise<Task[]> {
-  const params: Record<string, string> = {}
+/** Lists a page of tasks, optionally filtered, searched and sorted. */
+export async function fetchTasks(query: TaskListQuery = {}): Promise<PagedResponse<Task>> {
+  const params: Record<string, string | number> = {}
 
-  if (filters.status && filters.status !== 'ALL') {
-    params.status = filters.status
+  if (query.status && query.status !== 'ALL') {
+    params.status = query.status
   }
-  if (filters.priority && filters.priority !== 'ALL') {
-    params.priority = filters.priority
+  if (query.priority && query.priority !== 'ALL') {
+    params.priority = query.priority
+  }
+  if (query.search && query.search.trim() !== '') {
+    params.search = query.search.trim()
+  }
+  if (query.sort && query.sort !== 'CREATED_AT') {
+    params.sort = query.sort
+  }
+  if (query.page !== undefined) {
+    params.page = query.page
+  }
+  if (query.size !== undefined) {
+    params.size = query.size
   }
 
-  const response = await apiClient.get<Task[]>('/tasks', { params })
+  const response = await apiClient.get<PagedResponse<Task>>('/tasks', { params })
   return response.data
 }
 

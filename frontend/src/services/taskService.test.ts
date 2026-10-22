@@ -10,7 +10,7 @@ import {
   fetchTasks,
   updateTask,
 } from './taskService'
-import type { Task, TaskStatistics } from '../types/task'
+import type { PagedResponse, Task, TaskStatistics } from '../types/task'
 
 vi.mock('./api', () => ({
   apiClient: {
@@ -44,6 +44,16 @@ const sampleTask: Task = {
   updatedAt: '2026-01-02T10:00:00Z',
 }
 
+const samplePage: PagedResponse<Task> = {
+  content: [sampleTask],
+  page: 0,
+  size: 10,
+  totalElements: 1,
+  totalPages: 1,
+  first: true,
+  last: true,
+}
+
 const sampleStatistics: TaskStatistics = {
   total: 3,
   pending: 2,
@@ -58,17 +68,17 @@ describe('taskService', () => {
   })
 
   describe('fetchTasks', () => {
-    it('requests every task when no filter is applied', async () => {
-      mockedClient.get.mockResolvedValue({ data: [sampleTask] })
+    it('requests the first page with the default parameters when no query is given', async () => {
+      mockedClient.get.mockResolvedValue({ data: samplePage })
 
       const result = await fetchTasks()
 
       expect(mockedClient.get).toHaveBeenCalledWith('/tasks', { params: {} })
-      expect(result).toEqual([sampleTask])
+      expect(result).toEqual(samplePage)
     })
 
     it('sends the status filter when one is given', async () => {
-      mockedClient.get.mockResolvedValue({ data: [] })
+      mockedClient.get.mockResolvedValue({ data: samplePage })
 
       await fetchTasks({ status: 'PENDING' })
 
@@ -76,27 +86,35 @@ describe('taskService', () => {
     })
 
     it('sends the priority filter when one is given', async () => {
-      mockedClient.get.mockResolvedValue({ data: [] })
+      mockedClient.get.mockResolvedValue({ data: samplePage })
 
       await fetchTasks({ priority: 'HIGH' })
 
       expect(mockedClient.get).toHaveBeenCalledWith('/tasks', { params: { priority: 'HIGH' } })
     })
 
-    it('combines both filters', async () => {
-      mockedClient.get.mockResolvedValue({ data: [] })
+    it('sends the search term, trimmed', async () => {
+      mockedClient.get.mockResolvedValue({ data: samplePage })
 
-      await fetchTasks({ status: 'COMPLETED', priority: 'LOW' })
+      await fetchTasks({ search: '  milk  ' })
+
+      expect(mockedClient.get).toHaveBeenCalledWith('/tasks', { params: { search: 'milk' } })
+    })
+
+    it('sends the sort criterion and the pagination', async () => {
+      mockedClient.get.mockResolvedValue({ data: samplePage })
+
+      await fetchTasks({ sort: 'TITLE', page: 2, size: 5 })
 
       expect(mockedClient.get).toHaveBeenCalledWith('/tasks', {
-        params: { status: 'COMPLETED', priority: 'LOW' },
+        params: { sort: 'TITLE', page: 2, size: 5 },
       })
     })
 
     it('does not send the ALL values, which are the default ones', async () => {
-      mockedClient.get.mockResolvedValue({ data: [] })
+      mockedClient.get.mockResolvedValue({ data: samplePage })
 
-      await fetchTasks({ status: 'ALL', priority: 'ALL' })
+      await fetchTasks({ status: 'ALL', priority: 'ALL', search: '   ', sort: 'CREATED_AT' })
 
       expect(mockedClient.get).toHaveBeenCalledWith('/tasks', { params: {} })
     })

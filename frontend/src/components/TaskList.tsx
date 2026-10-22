@@ -8,6 +8,13 @@ interface TaskListProps {
   onToggle: (task: Task) => void
   onEdit: (task: Task) => void
   onDelete: (task: Task) => void
+  /**
+   * Title of the empty state. It changes when the list is empty because of a
+   * filter instead of because there are no tasks yet.
+   */
+  emptyTitle?: string
+  /** Text shown under the title of the empty state. */
+  emptyText?: string
 }
 
 /**
@@ -16,7 +23,16 @@ interface TaskListProps {
  * While the data is loading a spinner is shown instead of the list, so the
  * user knows the request is still in progress.
  */
-export function TaskList({ tasks, isLoading, isBusy, onToggle, onEdit, onDelete }: TaskListProps) {
+export function TaskList({
+  tasks,
+  isLoading,
+  isBusy,
+  onToggle,
+  onEdit,
+  onDelete,
+  emptyTitle = 'No tasks yet',
+  emptyText = 'Create your first task with the form on the left.',
+}: TaskListProps) {
   if (isLoading) {
     return (
       <div className="loader" role="status" aria-live="polite">
@@ -29,8 +45,8 @@ export function TaskList({ tasks, isLoading, isBusy, onToggle, onEdit, onDelete 
   if (tasks.length === 0) {
     return (
       <div className="empty-state">
-        <p className="empty-state__title">No tasks yet</p>
-        <p className="empty-state__text">Create your first task with the form on the left.</p>
+        <p className="empty-state__title">{emptyTitle}</p>
+        <p className="empty-state__text">{emptyText}</p>
       </div>
     )
   }

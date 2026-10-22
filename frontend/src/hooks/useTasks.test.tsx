@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { useTasks } from './useTasks'
 import * as taskService from '../services/taskService'
-import type { Task, TaskStatistics } from '../types/task'
+import type { PagedResponse, Task, TaskStatistics } from '../types/task'
 
 vi.mock('../services/taskService')
 
@@ -27,54 +27,147 @@ const sampleStatistics: TaskStatistics = {
   completionPercentage: 0,
 }
 
+function pageOf(tasks: Task[], totalElements = tasks.length): PagedResponse<Task> {
+  return {
+    content: tasks,
+    page: 0,
+    size: 10,
+    totalElements,
+    totalPages: Math.ceil(totalElements / 10),
+    first: true,
+    last: true,
+  }
+}
+
 describe('useTasks', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedService.fetchTasks.mockResolvedValue(pageOf([sampleTask]))
     mockedService.fetchStatistics.mockResolvedValue(sampleStatistics)
   })
 
   it('loads the tasks on the first render', async () => {
-    mockedService.fetchTasks.mockResolvedValue([sampleTask])
-
     const { result } = renderHook(() => useTasks())
 
     await waitFor(() => expect(result.current.isLoading).toBe(false))
-    expect(mockedService.fetchTasks).toHaveBeenCalledWith({ status: 'ALL', priority: 'ALL' })
+    expect(mockedService.fetchTasks).toHaveBeenCalledWith({
+      status: 'ALL',
+      priority: 'ALL',
+      search: '',
+      sort: 'CREATED_AT',
+      page: 0,
+      size: 10,
+    })
     expect(result.current.tasks).toHaveLength(1)
   })
 
   it('loads the statistics together with the list', async () => {
-    mockedService.fetchTasks.mockResolvedValue([sampleTask])
-
     const { result } = renderHook(() => useTasks())
 
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.statistics).toEqual(sampleStatistics)
   })
 
-  it('reloads the tasks when the status filter changes', async () => {
-    mockedService.fetchTasks.mockResolvedValue([sampleTask])
+  it('keeps the totals reported by the API', async () => {
+    mockedService.fetchTasks.mockResolvedValue(pageOf([sampleTask], 42))
 
+    const { result } = renderHook(() => useTasks())
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    expect(result.current.totalElements).toBe(42)
+    expect(result.current.totalPages).toBe(5)
+  })
+
+  it('reloads the tasks when the status filter changes', async () => {
     const { result } = renderHook(() => useTasks())
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
     act(() => result.current.setFilter('PENDING'))
 
     await waitFor(() =>
-      expect(mockedService.fetchTasks).toHaveBeenCalledWith({ status: 'PENDING', priority: 'ALL' }),
+      expect(mockedService.fetchTasks).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'PENDING' }),
+      ),
     )
   })
 
   it('reloads the tasks when the priority filter changes', async () => {
-    mockedService.fetchTasks.mockResolvedValue([sampleTask])
-
     const { result } = renderHook(() => useTasks())
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
     act(() => result.current.setPriorityFilter('HIGH'))
 
     await waitFor(() =>
-      expect(mockedService.fetchTasks).toHaveBeenCalledWith({ status: 'ALL', priority: 'HIGH' }),
+      expect(mockedService.fetchTasks).toHaveBeenCalledWith(
+        expect.objectContaining({ priority: 'HIGH' }),
+      ),
+    )
+  })
+
+  it('reloads the tasks when the sort criterion changes', async () => {
+    const { result } = renderHook(() => useTasks())
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    act(() => result.current.setSort('TITLE'))
+
+    await waitFor(() =>
+      expect(mockedService.fetchTasks).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'TITLE' }),
+      ),
+    )
+  })
+
+  it('goes back to the first page when a filter changes', async () => {
+    const { result } = renderHook(() => useTasks())
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    act(() => result.current.setPage(3))
+    await waitFor(() => expect(result.current.page).toBe(3))
+
+    act(() => result.current.setFilter('PENDING'))
+
+    await waitFor(() => expect(result.current.page).toBe(0))
+  })
+
+  it('asks for the requested page', async () => {
+    const { result } = renderHook(() => useTasks())
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    act(() => result.current.setPage(2))
+
+    await waitFor(() =>
+      expect(mockedService.fetchTasks).toHaveBeenCalledWith(
+        expect.objectContaining({ page: 2 }),
+      ),
+    )
+  })
+
+  it('never asks for a negative page', async () => {
+    const { result } = renderHook(() => useTasks())
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    act(() => result.current.setPage(-5))
+
+    await waitFor(() => expect(result.current.page).toBe(0))
+  })
+
+  it('waits for the user to stop typing before searching', async () => {
+    const { result } = renderHook(() => useTasks())
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    mockedService.fetchTasks.mockClear()
+
+    act(() => result.current.setSearch('mil'))
+    act(() => result.current.setSearch('milk'))
+
+    // Nothing is requested yet: the debounce has not expired.
+    expect(mockedService.fetchTasks).not.toHaveBeenCalled()
+
+    await waitFor(
+      () =>
+        expect(mockedService.fetchTasks).toHaveBeenCalledWith(
+          expect.objectContaining({ search: 'milk' }),
+        ),
+      { timeout: 2000 },
     )
   })
 
@@ -88,7 +181,6 @@ describe('useTasks', () => {
   })
 
   it('creates a task and refreshes the list', async () => {
-    mockedService.fetchTasks.mockResolvedValue([sampleTask])
     mockedService.createTask.mockResolvedValue(sampleTask)
 
     const { result } = renderHook(() => useTasks())
@@ -112,7 +204,6 @@ describe('useTasks', () => {
   })
 
   it('returns false and keeps the error when the creation fails', async () => {
-    mockedService.fetchTasks.mockResolvedValue([])
     mockedService.createTask.mockRejectedValue(new Error('invalid title'))
 
     const { result } = renderHook(() => useTasks())
@@ -135,7 +226,6 @@ describe('useTasks', () => {
   })
 
   it('toggles the status of a task', async () => {
-    mockedService.fetchTasks.mockResolvedValue([sampleTask])
     mockedService.changeTaskStatus.mockResolvedValue({ ...sampleTask, completed: true })
 
     const { result } = renderHook(() => useTasks())
@@ -149,7 +239,6 @@ describe('useTasks', () => {
   })
 
   it('deletes a task and refreshes the list', async () => {
-    mockedService.fetchTasks.mockResolvedValue([sampleTask])
     mockedService.deleteTask.mockResolvedValue(undefined)
 
     const { result } = renderHook(() => useTasks())

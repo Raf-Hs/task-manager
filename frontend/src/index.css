@@ -257,6 +257,81 @@ h3 {
   font-size: 0.85rem;
 }
 
+/* --------------------------------------------------------------- toolbar -- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.task-search {
+  position: relative;
+  flex: 1 1 260px;
+  display: flex;
+  align-items: center;
+}
+
+.task-search input {
+  width: 100%;
+  padding: 0.55rem 2rem 0.55rem 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font: inherit;
+  color: inherit;
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.task-search input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+
+.task-search__clear {
+  position: absolute;
+  right: 0.4rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--color-text-muted);
+  background-color: transparent;
+  cursor: pointer;
+}
+
+.task-search__clear:hover {
+  color: var(--color-text);
+  background-color: var(--color-bg);
+}
+
+.task-sort select {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.task-sort select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+
 /* --------------------------------------------------------------- filters -- */
 
 .filters {
@@ -326,6 +401,22 @@ h3 {
 
 .filters__count {
   margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+/* ------------------------------------------------------------ pagination -- */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.pagination__info {
   color: var(--color-text-muted);
   font-size: 0.85rem;
 }
