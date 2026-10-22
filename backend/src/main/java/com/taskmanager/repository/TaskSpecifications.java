@@ -14,7 +14,7 @@ import java.util.List;
  * Composable criteria used to build the task query.
  *
  * <p>Every criterion is optional and they are combined with {@code AND}, which
- * makes the filters cumulative: "pending" + "high priority".
+ * makes the filters cumulative: "pending" + "high priority" + "milk".
  *
  * <p>See ADR-0010 for why the filtering happens in the database.
  */
@@ -34,6 +34,7 @@ public final class TaskSpecifications {
 
         specification = specification.and(statusIs(filter.getStatus()));
         specification = specification.and(priorityIs(filter.getPriority()));
+        specification = specification.and(matchesText(filter.getSearch()));
         return specification;
     }
 
@@ -52,5 +53,32 @@ public final class TaskSpecifications {
             return null;
         }
         return (root, query, builder) -> builder.equal(root.get("priority"), priority);
+    }
+
+    /**
+     * Case-insensitive search over the title and the description.
+     *
+     * <p>The pattern is wrapped in wildcards, and the special characters of
+     * SQL LIKE are escaped so a search such as {@code %} does not match
+     * everything.
+     */
+    public static Specification<Task> matchesText(String search) {
+        if (search == null || search.isBlank()) {
+            return null;
+        }
+        String pattern = "%" + escapeLike(search.trim().toLowerCase()) + "%";
+        return (root, query, builder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(builder.like(builder.lower(root.get("title")), pattern, '\\'));
+            predicates.add(builder.like(builder.lower(root.get("description")), pattern, '\\'));
+            return builder.or(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    /** Escapes the characters that have a special meaning in a LIKE pattern. */
+    private static String escapeLike(String value) {
+        return value.replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
     }
 }

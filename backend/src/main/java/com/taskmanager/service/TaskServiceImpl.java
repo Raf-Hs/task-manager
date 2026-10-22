@@ -3,19 +3,22 @@ package com.taskmanager.service;
 import com.taskmanager.dto.TaskFilter;
 import com.taskmanager.dto.TaskRequest;
 import com.taskmanager.dto.TaskResponse;
+import com.taskmanager.dto.TaskSortOption;
 import com.taskmanager.dto.TaskStatistics;
 import com.taskmanager.entity.Task;
 import com.taskmanager.exception.TaskNotFoundException;
 import com.taskmanager.mapper.TaskMapper;
 import com.taskmanager.repository.TaskRepository;
 import com.taskmanager.repository.TaskSpecifications;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.List;
 
 /**
  * Implementation of the business rules.
@@ -27,15 +30,6 @@ import java.util.List;
 @Service
 @Transactional
 public class TaskServiceImpl implements TaskService {
-
-    /**
-     * Default ordering: pending tasks first and, inside each group, the most
-     * recent ones first.
-     */
-    private static final Sort DEFAULT_SORT = Sort.by(
-            Sort.Order.asc("completed"),
-            Sort.Order.desc("createdAt"),
-            Sort.Order.desc("id"));
 
     private final TaskRepository taskRepository;
     private final TaskMapper taskMapper;
@@ -52,11 +46,14 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<TaskResponse> findAll(TaskFilter filter) {
+    public Page<TaskResponse> findAll(TaskFilter filter, TaskSortOption sort, Pageable pageable) {
         Specification<Task> specification = TaskSpecifications.from(filter);
-        return taskRepository.findAll(specification, DEFAULT_SORT).stream()
-                .map(taskMapper::toResponse)
-                .toList();
+        PageRequest pageRequest = PageRequest.of(
+                pageable.getPageNumber(),
+                pageable.getPageSize(),
+                toSort(sort));
+        Page<Task> page = taskRepository.findAll(specification, pageRequest);
+        return page.map(taskMapper::toResponse);
     }
 
     @Override
@@ -108,6 +105,32 @@ public class TaskServiceImpl implements TaskService {
                 : (int) Math.round((completed * 100.0) / total);
 
         return new TaskStatistics(total, pending, completed, overdue, completionPercentage);
+    }
+
+    /**
+     * Translates a sort option into a Spring Data {@link Sort}.
+     *
+     * <p>Pending tasks are always pushed to the end of the list, whatever the
+     * criterion is: a finished task should not hide the work that is left.
+     * The identifier is added last as a tie breaker, so the order is stable
+     * and does not change between two identical requests.
+     */
+    private Sort toSort(TaskSortOption sort) {
+        TaskSortOption option = sort == null ? TaskSortOption.CREATED_AT : sort;
+        Sort.Direction direction = isAscending(option) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        return Sort.by(
+                Sort.Order.asc("completed"),
+                new Sort.Order(direction, option.getProperty()),
+                Sort.Order.desc("id"));
+    }
+
+    /**
+     * Titles are read alphabetically and deadlines are read as "the closest
+     * one first", so both are ascending. The rest are descending: the newest
+     * or the most urgent first.
+     */
+    private boolean isAscending(TaskSortOption option) {
+        return option == TaskSortOption.TITLE || option == TaskSortOption.DUE_DATE;
     }
 
     /** Loads a task or fails with a {@link TaskNotFoundException}. */

@@ -3,9 +3,10 @@ package com.taskmanager.service;
 import com.taskmanager.dto.TaskFilter;
 import com.taskmanager.dto.TaskRequest;
 import com.taskmanager.dto.TaskResponse;
+import com.taskmanager.dto.TaskSortOption;
 import com.taskmanager.dto.TaskStatistics;
-
-import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 /**
  * Business contract of the application.
@@ -17,12 +18,14 @@ import java.util.List;
 public interface TaskService {
 
     /**
-     * Returns every task matching the filter.
+     * Returns a page of tasks matching the filter.
      *
-     * @param filter status and priority filters (both optional)
-     * @return the matching tasks
+     * @param filter   status, priority and text search (all optional)
+     * @param sort     criterion used to order the results
+     * @param pageable pagination information
+     * @return the requested page of tasks
      */
-    List<TaskResponse> findAll(TaskFilter filter);
+    Page<TaskResponse> findAll(TaskFilter filter, TaskSortOption sort, Pageable pageable);
 
     /** Returns a single task. @throws com.taskmanager.exception.TaskNotFoundException if it does not exist. */
     TaskResponse findById(Long id);

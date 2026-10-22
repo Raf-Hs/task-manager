@@ -4,6 +4,7 @@ import com.taskmanager.dto.TaskFilter;
 import com.taskmanager.dto.TaskPriority;
 import com.taskmanager.dto.TaskRequest;
 import com.taskmanager.dto.TaskResponse;
+import com.taskmanager.dto.TaskSortOption;
 import com.taskmanager.dto.TaskStatus;
 import com.taskmanager.dto.TaskStatistics;
 import com.taskmanager.entity.Task;
@@ -17,6 +18,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -70,56 +75,121 @@ class TaskServiceImplTest {
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("findAll returns every task when no filter is applied")
-    void findAllReturnsEveryTask() {
-        when(taskRepository.findAll(any(Specification.class), any(Sort.class)))
-                .thenReturn(List.of(existingTask));
+    @DisplayName("findAll returns the requested page of tasks")
+    void findAllReturnsRequestedPage() {
+        Page<Task> page = new PageImpl<>(List.of(existingTask), PageRequest.of(0, 20), 1);
+        when(taskRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
 
-        List<TaskResponse> result = taskService.findAll(new TaskFilter());
+        Page<TaskResponse> result = taskService.findAll(
+                new TaskFilter(), TaskSortOption.CREATED_AT, PageRequest.of(0, 20));
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getId()).isEqualTo(1L);
-        assertThat(result.get(0).getTitle()).isEqualTo("Buy milk");
-        assertThat(result.get(0).getDueDate()).isEqualTo(LocalDate.of(2030, 1, 15));
-        assertThat(result.get(0).getPriority()).isEqualTo(TaskPriority.MEDIUM);
-        verify(taskRepository, times(1)).findAll(any(Specification.class), any(Sort.class));
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getId()).isEqualTo(1L);
+        assertThat(result.getContent().get(0).getTitle()).isEqualTo("Buy milk");
+        assertThat(result.getContent().get(0).getPriority()).isEqualTo(TaskPriority.MEDIUM);
+        assertThat(result.getTotalElements()).isEqualTo(1);
     }
 
     @Test
-    @DisplayName("findAll returns an empty list when there are no tasks")
-    void findAllReturnsEmptyList() {
-        when(taskRepository.findAll(any(Specification.class), any(Sort.class))).thenReturn(List.of());
+    @DisplayName("findAll returns an empty page when there are no tasks")
+    void findAllReturnsEmptyPage() {
+        when(taskRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
-        assertThat(taskService.findAll(new TaskFilter())).isEmpty();
+        Page<TaskResponse> result = taskService.findAll(
+                new TaskFilter(), TaskSortOption.CREATED_AT, PageRequest.of(0, 20));
+
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isZero();
     }
 
     @Test
     @DisplayName("findAll keeps the pending tasks before the completed ones")
     void findAllKeepsPendingFirst() {
-        when(taskRepository.findAll(any(Specification.class), any(Sort.class)))
-                .thenReturn(List.of(existingTask));
+        when(taskRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(existingTask)));
 
-        taskService.findAll(new TaskFilter());
+        taskService.findAll(new TaskFilter(), TaskSortOption.CREATED_AT, PageRequest.of(0, 20));
 
-        ArgumentCaptor<Sort> captor = ArgumentCaptor.forClass(Sort.class);
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
         verify(taskRepository).findAll(any(Specification.class), captor.capture());
 
-        Sort.Order byCompleted = captor.getValue().getOrderFor("completed");
+        Sort.Order byCompleted = captor.getValue().getSort().getOrderFor("completed");
         assertThat(byCompleted).isNotNull();
         assertThat(byCompleted.isAscending()).isTrue();
     }
 
     @Test
-    @DisplayName("findAll applies the status filter")
-    void findAllAppliesStatusFilter() {
-        when(taskRepository.findAll(any(Specification.class), any(Sort.class))).thenReturn(List.of());
+    @DisplayName("findAll sorts by title in ascending order")
+    void findAllSortsByTitleAscending() {
+        when(taskRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(existingTask)));
+
+        taskService.findAll(new TaskFilter(), TaskSortOption.TITLE, PageRequest.of(0, 20));
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(taskRepository).findAll(any(Specification.class), captor.capture());
+
+        Sort.Order byTitle = captor.getValue().getSort().getOrderFor("title");
+        assertThat(byTitle).isNotNull();
+        assertThat(byTitle.isAscending()).isTrue();
+    }
+
+    @Test
+    @DisplayName("findAll sorts by creation date in descending order")
+    void findAllSortsByCreatedAtDescending() {
+        when(taskRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(existingTask)));
+
+        taskService.findAll(new TaskFilter(), TaskSortOption.CREATED_AT, PageRequest.of(0, 20));
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(taskRepository).findAll(any(Specification.class), captor.capture());
+
+        Sort.Order byCreatedAt = captor.getValue().getSort().getOrderFor("createdAt");
+        assertThat(byCreatedAt).isNotNull();
+        assertThat(byCreatedAt.isAscending()).isFalse();
+    }
+
+    @Test
+    @DisplayName("findAll falls back to the creation date when no criterion is given")
+    void findAllFallsBackToDefaultSort() {
+        when(taskRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(existingTask)));
+
+        taskService.findAll(new TaskFilter(), null, PageRequest.of(0, 20));
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(taskRepository).findAll(any(Specification.class), captor.capture());
+        assertThat(captor.getValue().getSort().getOrderFor("createdAt")).isNotNull();
+    }
+
+    @Test
+    @DisplayName("findAll keeps the requested page number and size")
+    void findAllKeepsPagination() {
+        when(taskRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(existingTask)));
+
+        taskService.findAll(new TaskFilter(), TaskSortOption.CREATED_AT, PageRequest.of(2, 5));
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(taskRepository).findAll(any(Specification.class), captor.capture());
+        assertThat(captor.getValue().getPageNumber()).isEqualTo(2);
+        assertThat(captor.getValue().getPageSize()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("findAll applies the search term to the query")
+    void findAllAppliesSearch() {
+        when(taskRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(existingTask)));
 
         TaskFilter filter = new TaskFilter();
-        filter.setStatus(TaskStatus.PENDING);
+        filter.setSearch("milk");
 
-        taskService.findAll(filter);
+        taskService.findAll(filter, TaskSortOption.CREATED_AT, PageRequest.of(0, 20));
 
-        verify(taskRepository).findAll(any(Specification.class), any(Sort.class));
+        verify(taskRepository).findAll(any(Specification.class), any(Pageable.class));
     }
 
     // ------------------------------------------------------------------
@@ -352,5 +422,6 @@ class TaskServiceImplTest {
 
         assertThat(filter.getStatus()).isEqualTo(TaskStatus.ALL);
         assertThat(filter.getPriority()).isNull();
+        assertThat(filter.getSearch()).isNull();
     }
 }

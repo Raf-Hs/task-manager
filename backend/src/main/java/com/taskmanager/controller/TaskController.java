@@ -1,9 +1,11 @@
 package com.taskmanager.controller;
 
+import com.taskmanager.dto.PagedResponse;
 import com.taskmanager.dto.TaskFilter;
 import com.taskmanager.dto.TaskPriority;
 import com.taskmanager.dto.TaskRequest;
 import com.taskmanager.dto.TaskResponse;
+import com.taskmanager.dto.TaskSortOption;
 import com.taskmanager.dto.TaskStatistics;
 import com.taskmanager.dto.TaskStatus;
 import com.taskmanager.dto.UpdateCompletedRequest;
@@ -14,6 +16,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -29,7 +32,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
-import java.util.List;
 
 /**
  * REST endpoints to manage tasks.
@@ -42,6 +44,12 @@ import java.util.List;
 @Tag(name = "Tasks", description = "CRUD operations over the personal tasks")
 public class TaskController {
 
+    /** Maximum number of elements a single page can hold. */
+    private static final int MAX_PAGE_SIZE = 100;
+
+    /** Number of elements per page when the client does not specify it. */
+    private static final int DEFAULT_PAGE_SIZE = 20;
+
     private final TaskService taskService;
 
     public TaskController(TaskService taskService) {
@@ -50,20 +58,34 @@ public class TaskController {
 
     @Operation(
             summary = "List tasks",
-            description = "Returns the tasks matching the given filters. The result can be filtered "
-                    + "by status and by priority.")
+            description = "Returns a page of tasks. The result can be filtered by status and priority, "
+                    + "searched by text and sorted by the given criterion.")
     @GetMapping
-    public ResponseEntity<List<TaskResponse>> list(
+    public ResponseEntity<PagedResponse<TaskResponse>> list(
             @Parameter(description = "ALL (default), PENDING or COMPLETED")
             @RequestParam(name = "status", defaultValue = "ALL", required = false) String status,
-            @Parameter(description = "HIGH, MEDIUM or LOW")
-            @RequestParam(name = "priority", required = false) String priority) {
+            @Parameter(description = "Filter by priority")
+            @RequestParam(name = "priority", required = false) String priority,
+            @Parameter(description = "Case-insensitive text search over the title and the description")
+            @RequestParam(name = "search", required = false) String search,
+            @Parameter(description = "CREATED_AT (default), UPDATED_AT, DUE_DATE, TITLE or PRIORITY")
+            @RequestParam(name = "sort", defaultValue = "CREATED_AT", required = false) String sort,
+            @Parameter(description = "Zero-based page number")
+            @RequestParam(name = "page", defaultValue = "0", required = false) int page,
+            @Parameter(description = "Elements per page (1-100)")
+            @RequestParam(name = "size", defaultValue = "20", required = false) int size) {
 
         TaskFilter filter = new TaskFilter();
         filter.setStatus(TaskStatus.from(status));
         filter.setPriority(parsePriority(priority));
+        filter.setSearch(search);
 
-        return ResponseEntity.ok(taskService.findAll(filter));
+        TaskSortOption sortOption = TaskSortOption.from(sort);
+        PageRequest pageRequest = PageRequest.of(
+                Math.max(page, 0),
+                clampSize(size));
+
+        return ResponseEntity.ok(PagedResponse.from(taskService.findAll(filter, sortOption, pageRequest)));
     }
 
     @Operation(summary = "Get task statistics", description = "Aggregated figures of the whole task list")
@@ -143,5 +165,13 @@ public class TaskController {
             return null;
         }
         return TaskPriority.from(priority);
+    }
+
+    /** Keeps the page size inside the allowed range. */
+    private int clampSize(int size) {
+        if (size <= 0) {
+            return DEFAULT_PAGE_SIZE;
+        }
+        return Math.min(size, MAX_PAGE_SIZE);
     }
 }

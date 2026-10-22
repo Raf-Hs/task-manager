@@ -9,6 +9,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDate;
@@ -108,6 +111,57 @@ class TaskRepositoryTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getTitle()).isEqualTo("Urgent pending");
+    }
+
+    @Test
+    @DisplayName("The text search matches the title and the description, ignoring the case")
+    void searchByText() {
+        taskRepository.save(new Task("Buy milk", "Semi skimmed", null, TaskPriority.MEDIUM, false));
+        taskRepository.save(new Task("Write the report", "Final version", null, TaskPriority.MEDIUM, false));
+        entityManager.flush();
+
+        TaskFilter byTitle = new TaskFilter();
+        byTitle.setSearch("MILK");
+        assertThat(taskRepository.findAll(TaskSpecifications.from(byTitle))).hasSize(1);
+
+        TaskFilter byDescription = new TaskFilter();
+        byDescription.setSearch("final");
+        assertThat(taskRepository.findAll(TaskSpecifications.from(byDescription))).hasSize(1);
+
+        TaskFilter noMatch = new TaskFilter();
+        noMatch.setSearch("bicycle");
+        assertThat(taskRepository.findAll(TaskSpecifications.from(noMatch))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("The text search escapes the wildcard characters")
+    void searchEscapesWildcards() {
+        taskRepository.save(new Task("100% done", null, null, TaskPriority.MEDIUM, false));
+        taskRepository.save(new Task("Nothing special", null, null, TaskPriority.MEDIUM, false));
+        entityManager.flush();
+
+        TaskFilter filter = new TaskFilter();
+        filter.setSearch("%");
+
+        assertThat(taskRepository.findAll(TaskSpecifications.from(filter))).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("The pagination returns the requested slice")
+    void paginationReturnsSlice() {
+        for (int i = 1; i <= 5; i++) {
+            givenTask("Task " + i, TaskPriority.MEDIUM, null, false);
+        }
+        entityManager.flush();
+
+        Page<Task> page = taskRepository.findAll(
+                TaskSpecifications.from(new TaskFilter()),
+                PageRequest.of(1, 2, Sort.by(Sort.Order.asc("id"))));
+
+        assertThat(page.getContent()).hasSize(2);
+        assertThat(page.getTotalElements()).isEqualTo(5);
+        assertThat(page.getTotalPages()).isEqualTo(3);
+        assertThat(page.getNumber()).isEqualTo(1);
     }
 
     @Test

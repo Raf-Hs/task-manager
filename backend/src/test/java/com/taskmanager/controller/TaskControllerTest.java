@@ -5,6 +5,7 @@ import com.taskmanager.dto.TaskFilter;
 import com.taskmanager.dto.TaskPriority;
 import com.taskmanager.dto.TaskRequest;
 import com.taskmanager.dto.TaskResponse;
+import com.taskmanager.dto.TaskSortOption;
 import com.taskmanager.dto.TaskStatistics;
 import com.taskmanager.dto.UpdateCompletedRequest;
 import com.taskmanager.exception.TaskNotFoundException;
@@ -15,6 +16,10 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -67,50 +72,132 @@ class TaskControllerTest {
                 Instant.parse("2026-01-01T10:00:00Z"), Instant.parse("2026-01-02T10:00:00Z"));
     }
 
+    private Page<TaskResponse> samplePage() {
+        return new PageImpl<>(List.of(sampleResponse()), PageRequest.of(0, 20), 1);
+    }
+
     // ------------------------------------------------------------------
     // GET /api/tasks
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("GET /api/tasks returns the list of tasks")
+    @DisplayName("GET /api/tasks returns a page of tasks")
     void listTasks() throws Exception {
-        when(taskService.findAll(any(TaskFilter.class))).thenReturn(List.of(sampleResponse()));
+        when(taskService.findAll(any(TaskFilter.class), any(TaskSortOption.class), any(Pageable.class)))
+                .thenReturn(samplePage());
 
         mockMvc.perform(get("/api/tasks"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(1)))
-                .andExpect(jsonPath("$[0].id").value(1))
-                .andExpect(jsonPath("$[0].title").value("Buy milk"))
-                .andExpect(jsonPath("$[0].completed").value(false))
-                .andExpect(jsonPath("$[0].priority").value("HIGH"))
-                .andExpect(jsonPath("$[0].updatedAt").value("2026-01-02T10:00:00Z"));
+                .andExpect(jsonPath("$.content", org.hamcrest.Matchers.hasSize(1)))
+                .andExpect(jsonPath("$.content[0].id").value(1))
+                .andExpect(jsonPath("$.content[0].title").value("Buy milk"))
+                .andExpect(jsonPath("$.content[0].completed").value(false))
+                .andExpect(jsonPath("$.content[0].priority").value("HIGH"))
+                .andExpect(jsonPath("$.content[0].updatedAt").value("2026-01-02T10:00:00Z"))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.first").value(true))
+                .andExpect(jsonPath("$.last").value(true));
     }
 
     @Test
     @DisplayName("GET /api/tasks?status=PENDING filters the pending tasks")
     void listTasksFilteredByStatus() throws Exception {
-        when(taskService.findAll(any(TaskFilter.class))).thenReturn(List.of());
+        when(taskService.findAll(any(TaskFilter.class), any(TaskSortOption.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/tasks").param("status", "PENDING"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(0)));
+                .andExpect(jsonPath("$.content", org.hamcrest.Matchers.hasSize(0)));
 
         ArgumentCaptor<TaskFilter> captor = ArgumentCaptor.forClass(TaskFilter.class);
-        verify(taskService).findAll(captor.capture());
+        verify(taskService).findAll(captor.capture(), any(TaskSortOption.class), any(Pageable.class));
         assertThat(captor.getValue().getStatus().name()).isEqualTo("PENDING");
     }
 
     @Test
     @DisplayName("GET /api/tasks?priority=HIGH filters by priority")
     void listTasksFilteredByPriority() throws Exception {
-        when(taskService.findAll(any(TaskFilter.class))).thenReturn(List.of(sampleResponse()));
+        when(taskService.findAll(any(TaskFilter.class), any(TaskSortOption.class), any(Pageable.class)))
+                .thenReturn(samplePage());
 
         mockMvc.perform(get("/api/tasks").param("priority", "HIGH"))
                 .andExpect(status().isOk());
 
         ArgumentCaptor<TaskFilter> captor = ArgumentCaptor.forClass(TaskFilter.class);
-        verify(taskService).findAll(captor.capture());
+        verify(taskService).findAll(captor.capture(), any(TaskSortOption.class), any(Pageable.class));
         assertThat(captor.getValue().getPriority()).isEqualTo(TaskPriority.HIGH);
+    }
+
+    @Test
+    @DisplayName("GET /api/tasks?search=milk searches by text")
+    void listTasksFilteredBySearch() throws Exception {
+        when(taskService.findAll(any(TaskFilter.class), any(TaskSortOption.class), any(Pageable.class)))
+                .thenReturn(samplePage());
+
+        mockMvc.perform(get("/api/tasks").param("search", "milk"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<TaskFilter> captor = ArgumentCaptor.forClass(TaskFilter.class);
+        verify(taskService).findAll(captor.capture(), any(TaskSortOption.class), any(Pageable.class));
+        assertThat(captor.getValue().getSearch()).isEqualTo("milk");
+    }
+
+    @Test
+    @DisplayName("GET /api/tasks?sort=TITLE sorts by title")
+    void listTasksSorted() throws Exception {
+        when(taskService.findAll(any(TaskFilter.class), any(TaskSortOption.class), any(Pageable.class)))
+                .thenReturn(samplePage());
+
+        mockMvc.perform(get("/api/tasks").param("sort", "TITLE"))
+                .andExpect(status().isOk());
+
+        verify(taskService).findAll(any(TaskFilter.class), eq(TaskSortOption.TITLE), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("GET /api/tasks?page=2&size=5 uses the requested pagination")
+    void listTasksPaginated() throws Exception {
+        when(taskService.findAll(any(TaskFilter.class), any(TaskSortOption.class), any(Pageable.class)))
+                .thenReturn(samplePage());
+
+        mockMvc.perform(get("/api/tasks").param("page", "2").param("size", "5"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(taskService).findAll(any(TaskFilter.class), any(TaskSortOption.class), captor.capture());
+        assertThat(captor.getValue().getPageNumber()).isEqualTo(2);
+        assertThat(captor.getValue().getPageSize()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("GET /api/tasks?size=500 clamps the page size to 100")
+    void listTasksClampsPageSize() throws Exception {
+        when(taskService.findAll(any(TaskFilter.class), any(TaskSortOption.class), any(Pageable.class)))
+                .thenReturn(samplePage());
+
+        mockMvc.perform(get("/api/tasks").param("size", "500"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(taskService).findAll(any(TaskFilter.class), any(TaskSortOption.class), captor.capture());
+        assertThat(captor.getValue().getPageSize()).isEqualTo(100);
+    }
+
+    @Test
+    @DisplayName("GET /api/tasks?page=-1 falls back to the first page")
+    void listTasksClampsNegativePage() throws Exception {
+        when(taskService.findAll(any(TaskFilter.class), any(TaskSortOption.class), any(Pageable.class)))
+                .thenReturn(samplePage());
+
+        mockMvc.perform(get("/api/tasks").param("page", "-1"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(taskService).findAll(any(TaskFilter.class), any(TaskSortOption.class), captor.capture());
+        assertThat(captor.getValue().getPageNumber()).isZero();
     }
 
     @Test
@@ -126,6 +213,14 @@ class TaskControllerTest {
     @DisplayName("GET /api/tasks?priority=URGENT returns 400")
     void listTasksWithInvalidPriority() throws Exception {
         mockMvc.perform(get("/api/tasks").param("priority", "URGENT"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    @DisplayName("GET /api/tasks?sort=random returns 400")
+    void listTasksWithInvalidSort() throws Exception {
+        mockMvc.perform(get("/api/tasks").param("sort", "random"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
     }
