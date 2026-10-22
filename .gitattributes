@@ -1,0 +1,16 @@
+# Normalise the line endings to LF in the repository and check them out with
+# the native convention of each operating system.
+* text=auto eol=lf
+
+# Windows scripts must keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.jar binary
+*.pdf binary

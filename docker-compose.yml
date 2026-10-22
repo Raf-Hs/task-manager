@@ -1,0 +1,34 @@
+# ---------------------------------------------------------------------------
+# PostgreSQL for the Task Manager project
+#
+# Usage:
+#     docker compose up -d      # start the database in the background
+#     docker compose logs -f    # follow the logs
+#     docker compose down       # stop it (add -v to also delete the data)
+#
+# The credentials come from the .env file (copy .env.example first).
+# ---------------------------------------------------------------------------
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: task-manager-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-taskdb}
+      POSTGRES_USER: ${POSTGRES_USER:-taskuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taskpassword}
+    ports:
+      # "host port:container port"
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # Named volume so the data survives a `docker compose down`.
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-taskuser} -d ${POSTGRES_DB:-taskdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
