@@ -1,4 +1,4 @@
-import type { Task } from '../types/task'
+import type { Task, TaskPriority } from '../types/task'
 import { formatDate, formatDateTime, isOverdue } from '../utils/dateUtils'
 
 interface TaskItemProps {
@@ -11,6 +11,12 @@ interface TaskItemProps {
   onEdit: (task: Task) => void
   /** Asks for the deletion of the task. */
   onDelete: (task: Task) => void
+}
+
+const PRIORITY_LABELS: Record<TaskPriority, string> = {
+  LOW: 'Low priority',
+  MEDIUM: 'Medium priority',
+  HIGH: 'High priority',
 }
 
 /**
@@ -27,6 +33,9 @@ export function TaskItem({ task, isBusy, onToggle, onEdit, onDelete }: TaskItemP
       <div className="task-card__main">
         <div className="task-card__header">
           <h3 className="task-card__title">{task.title}</h3>
+          <span className={`badge badge--priority-${task.priority.toLowerCase()}`}>
+            {PRIORITY_LABELS[task.priority]}
+          </span>
           {task.completed && <span className="badge badge--success">Completed</span>}
           {overdue && <span className="badge badge--danger">Overdue</span>}
         </div>

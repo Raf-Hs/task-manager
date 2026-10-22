@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { useTasks } from './useTasks'
 import * as taskService from '../services/taskService'
-import type { Task } from '../types/task'
+import type { Task, TaskStatistics } from '../types/task'
 
 vi.mock('../services/taskService')
 
@@ -13,13 +13,24 @@ const sampleTask: Task = {
   title: 'Buy milk',
   description: null,
   dueDate: null,
+  priority: 'MEDIUM',
   completed: false,
   createdAt: '2026-01-01T10:00:00Z',
+  updatedAt: '2026-01-01T10:00:00Z',
+}
+
+const sampleStatistics: TaskStatistics = {
+  total: 1,
+  pending: 1,
+  completed: 0,
+  overdue: 0,
+  completionPercentage: 0,
 }
 
 describe('useTasks', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedService.fetchStatistics.mockResolvedValue(sampleStatistics)
   })
 
   it('loads the tasks on the first render', async () => {
@@ -28,11 +39,20 @@ describe('useTasks', () => {
     const { result } = renderHook(() => useTasks())
 
     await waitFor(() => expect(result.current.isLoading).toBe(false))
-    expect(mockedService.fetchTasks).toHaveBeenCalledWith('ALL')
+    expect(mockedService.fetchTasks).toHaveBeenCalledWith({ status: 'ALL', priority: 'ALL' })
     expect(result.current.tasks).toHaveLength(1)
   })
 
-  it('reloads the tasks when the filter changes', async () => {
+  it('loads the statistics together with the list', async () => {
+    mockedService.fetchTasks.mockResolvedValue([sampleTask])
+
+    const { result } = renderHook(() => useTasks())
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    expect(result.current.statistics).toEqual(sampleStatistics)
+  })
+
+  it('reloads the tasks when the status filter changes', async () => {
     mockedService.fetchTasks.mockResolvedValue([sampleTask])
 
     const { result } = renderHook(() => useTasks())
@@ -40,7 +60,22 @@ describe('useTasks', () => {
 
     act(() => result.current.setFilter('PENDING'))
 
-    await waitFor(() => expect(mockedService.fetchTasks).toHaveBeenCalledWith('PENDING'))
+    await waitFor(() =>
+      expect(mockedService.fetchTasks).toHaveBeenCalledWith({ status: 'PENDING', priority: 'ALL' }),
+    )
+  })
+
+  it('reloads the tasks when the priority filter changes', async () => {
+    mockedService.fetchTasks.mockResolvedValue([sampleTask])
+
+    const { result } = renderHook(() => useTasks())
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    act(() => result.current.setPriorityFilter('HIGH'))
+
+    await waitFor(() =>
+      expect(mockedService.fetchTasks).toHaveBeenCalledWith({ status: 'ALL', priority: 'HIGH' }),
+    )
   })
 
   it('stores the error message when the request fails', async () => {
@@ -59,7 +94,13 @@ describe('useTasks', () => {
     const { result } = renderHook(() => useTasks())
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    const input = { title: 'Buy milk', description: null, dueDate: null, completed: false }
+    const input = {
+      title: 'Buy milk',
+      description: null,
+      dueDate: null,
+      priority: 'MEDIUM' as const,
+      completed: false,
+    }
     let created = false
     await act(async () => {
       created = await result.current.createTask(input)
@@ -77,7 +118,13 @@ describe('useTasks', () => {
     const { result } = renderHook(() => useTasks())
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    const input = { title: '', description: null, dueDate: null, completed: false }
+    const input = {
+      title: '',
+      description: null,
+      dueDate: null,
+      priority: 'MEDIUM' as const,
+      completed: false,
+    }
     let created = true
     await act(async () => {
       created = await result.current.createTask(input)

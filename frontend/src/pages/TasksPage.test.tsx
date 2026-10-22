@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { AxiosError } from 'axios'
 import { TasksPage } from './TasksPage'
 import * as taskService from '../services/taskService'
-import type { Task } from '../types/task'
+import type { Task, TaskStatistics } from '../types/task'
 
 vi.mock('../services/taskService')
 
@@ -15,8 +15,10 @@ const pendingTask: Task = {
   title: 'Buy milk',
   description: 'Semi skimmed',
   dueDate: '2999-01-15',
+  priority: 'HIGH',
   completed: false,
   createdAt: '2026-01-01T10:00:00Z',
+  updatedAt: '2026-01-01T10:00:00Z',
 }
 
 const completedTask: Task = {
@@ -24,8 +26,18 @@ const completedTask: Task = {
   title: 'Finished task',
   description: null,
   dueDate: null,
+  priority: 'LOW',
   completed: true,
   createdAt: '2026-01-02T10:00:00Z',
+  updatedAt: '2026-01-02T10:00:00Z',
+}
+
+const statistics: TaskStatistics = {
+  total: 2,
+  pending: 1,
+  completed: 1,
+  overdue: 0,
+  completionPercentage: 50,
 }
 
 /** Builds a real AxiosError so `getErrorMessage` can read the response body. */
@@ -52,6 +64,7 @@ describe('TasksPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockedService.fetchTasks.mockResolvedValue([pendingTask, completedTask])
+    mockedService.fetchStatistics.mockResolvedValue(statistics)
     mockedService.createTask.mockResolvedValue(pendingTask)
     mockedService.updateTask.mockResolvedValue(pendingTask)
     mockedService.changeTaskStatus.mockResolvedValue(completedTask)
@@ -73,6 +86,16 @@ describe('TasksPage', () => {
     expect(screen.getByText('2 tasks')).toBeInTheDocument()
   })
 
+  it('shows the statistics panel', async () => {
+    render(<TasksPage />)
+
+    const panel = await screen.findByRole('region', { name: /task statistics/i })
+    expect(within(panel).getByText('Total')).toBeInTheDocument()
+    expect(within(panel).getByText('Pending')).toBeInTheDocument()
+    expect(within(panel).getByText('Overdue')).toBeInTheDocument()
+    expect(within(panel).getByText('50%')).toBeInTheDocument()
+  })
+
   it('creates a task and shows a success message', async () => {
     const user = userEvent.setup()
     render(<TasksPage />)
@@ -85,6 +108,7 @@ describe('TasksPage', () => {
       title: 'New task from the page',
       description: null,
       dueDate: null,
+      priority: 'MEDIUM',
       completed: false,
     })
     expect(await screen.findByText(/was created/i)).toBeInTheDocument()
@@ -151,7 +175,7 @@ describe('TasksPage', () => {
     expect(mockedService.deleteTask).not.toHaveBeenCalled()
   })
 
-  it('requests the tasks again when the filter changes', async () => {
+  it('requests the tasks again when the status filter changes', async () => {
     const user = userEvent.setup()
     render(<TasksPage />)
     await screen.findByText('Buy milk')
@@ -159,7 +183,21 @@ describe('TasksPage', () => {
     const filters = screen.getByRole('group', { name: /filter tasks by status/i })
     await user.click(within(filters).getByRole('button', { name: /^pending$/i }))
 
-    await waitFor(() => expect(mockedService.fetchTasks).toHaveBeenCalledWith('PENDING'))
+    await waitFor(() =>
+      expect(mockedService.fetchTasks).toHaveBeenCalledWith({ status: 'PENDING', priority: 'ALL' }),
+    )
+  })
+
+  it('requests the tasks again when the priority filter changes', async () => {
+    const user = userEvent.setup()
+    render(<TasksPage />)
+    await screen.findByText('Buy milk')
+
+    await user.selectOptions(screen.getByLabelText(/filter tasks by priority/i), 'HIGH')
+
+    await waitFor(() =>
+      expect(mockedService.fetchTasks).toHaveBeenCalledWith({ status: 'ALL', priority: 'HIGH' }),
+    )
   })
 
   it('loads the task into the form when it is edited', async () => {
@@ -188,6 +226,7 @@ describe('TasksPage', () => {
       title: 'Updated title',
       description: 'Semi skimmed',
       dueDate: '2999-01-15',
+      priority: 'HIGH',
       completed: false,
     })
   })

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { TaskForm } from '../components/TaskForm'
 import { TaskList } from '../components/TaskList'
 import { TaskFilters } from '../components/TaskFilters'
+import { TaskStats } from '../components/TaskStats'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { NotificationList } from '../components/NotificationList'
 import { useTasks } from '../hooks/useTasks'
@@ -17,11 +18,14 @@ import type { Task, TaskInput } from '../types/task'
 export function TasksPage() {
   const {
     tasks,
+    statistics,
     isLoading,
     isSaving,
     error,
     filter,
     setFilter,
+    priorityFilter,
+    setPriorityFilter,
     createTask,
     updateTask,
     toggleTask,
@@ -88,7 +92,15 @@ export function TasksPage() {
         </aside>
 
         <main className="layout__content">
-          <TaskFilters activeFilter={filter} onChange={setFilter} total={tasks.length} />
+          <TaskStats statistics={statistics} />
+
+          <TaskFilters
+            activeFilter={filter}
+            onChange={setFilter}
+            activePriority={priorityFilter}
+            onPriorityChange={setPriorityFilter}
+            total={tasks.length}
+          />
 
           {error && (
             <div className="alert alert--error" role="alert">

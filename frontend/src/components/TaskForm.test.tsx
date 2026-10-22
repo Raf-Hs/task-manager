@@ -9,8 +9,10 @@ const existingTask: Task = {
   title: 'Buy milk',
   description: 'Semi skimmed',
   dueDate: '2030-01-15',
+  priority: 'HIGH',
   completed: false,
   createdAt: '2026-01-01T10:00:00Z',
+  updatedAt: '2026-01-02T10:00:00Z',
 }
 
 function renderForm(props: Partial<React.ComponentProps<typeof TaskForm>> = {}) {
@@ -39,6 +41,7 @@ describe('TaskForm', () => {
     expect(screen.getByLabelText(/title/i)).toHaveValue('Buy milk')
     expect(screen.getByLabelText(/description/i)).toHaveValue('Semi skimmed')
     expect(screen.getByLabelText(/due date/i)).toHaveValue('2030-01-15')
+    expect(screen.getByLabelText(/priority/i)).toHaveValue('HIGH')
   })
 
   it('rejects a blank title without calling onSubmit', async () => {
@@ -73,12 +76,14 @@ describe('TaskForm', () => {
     await user.type(screen.getByLabelText(/title/i), 'Write the report')
     await user.type(screen.getByLabelText(/description/i), 'Final version')
     await user.type(screen.getByLabelText(/due date/i), '2030-02-01')
+    await user.selectOptions(screen.getByLabelText(/priority/i), 'HIGH')
     await user.click(screen.getByRole('button', { name: /create task/i }))
 
     expect(onSubmit).toHaveBeenCalledWith({
       title: 'Write the report',
       description: 'Final version',
       dueDate: '2030-02-01',
+      priority: 'HIGH',
       completed: false,
     })
   })
@@ -94,6 +99,7 @@ describe('TaskForm', () => {
       title: 'Only a title',
       description: null,
       dueDate: null,
+      priority: 'MEDIUM',
       completed: false,
     })
   })

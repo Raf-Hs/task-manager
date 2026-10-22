@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Task, TaskInput } from '../types/task'
+import type { Task, TaskInput, TaskPriority } from '../types/task'
 
 interface TaskFormProps {
   /** Task being edited. When it is `null` the form creates a new task. */
@@ -18,6 +18,12 @@ interface FormErrors {
   dueDate?: string
 }
 
+const PRIORITIES: Array<{ value: TaskPriority; label: string }> = [
+  { value: 'LOW', label: 'Low' },
+  { value: 'MEDIUM', label: 'Medium' },
+  { value: 'HIGH', label: 'High' },
+]
+
 /**
  * Form used to create and to edit tasks.
  *
@@ -30,6 +36,7 @@ export function TaskForm({ task, isSaving, onSubmit, onCancel }: TaskFormProps) 
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
   const [dueDate, setDueDate] = useState(task?.dueDate ?? '')
+  const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'MEDIUM')
   const [completed, setCompleted] = useState(task?.completed ?? false)
   const [errors, setErrors] = useState<FormErrors>({})
 
@@ -60,6 +67,7 @@ export function TaskForm({ task, isSaving, onSubmit, onCancel }: TaskFormProps) 
       title: title.trim(),
       description: description.trim() ? description.trim() : null,
       dueDate: dueDate ? dueDate : null,
+      priority,
       completed,
     })
   }
@@ -68,6 +76,7 @@ export function TaskForm({ task, isSaving, onSubmit, onCancel }: TaskFormProps) 
     setTitle(task?.title ?? '')
     setDescription(task?.description ?? '')
     setDueDate(task?.dueDate ?? '')
+    setPriority(task?.priority ?? 'MEDIUM')
     setCompleted(task?.completed ?? false)
     setErrors({})
   }
@@ -126,6 +135,22 @@ export function TaskForm({ task, isSaving, onSubmit, onCancel }: TaskFormProps) 
             {errors.dueDate}
           </p>
         )}
+      </div>
+
+      <div className="field">
+        <label htmlFor="task-priority">Priority</label>
+        <select
+          id="task-priority"
+          name="priority"
+          value={priority}
+          onChange={(event) => setPriority(event.target.value as TaskPriority)}
+        >
+          {PRIORITIES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="field field--checkbox">

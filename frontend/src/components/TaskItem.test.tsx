@@ -10,8 +10,10 @@ function buildTask(overrides: Partial<Task> = {}): Task {
     title: 'Buy milk',
     description: 'Semi skimmed',
     dueDate: '2999-01-15',
+    priority: 'MEDIUM',
     completed: false,
     createdAt: '2026-01-01T10:00:00Z',
+    updatedAt: '2026-01-01T10:00:00Z',
     ...overrides,
   }
 }
@@ -53,6 +55,20 @@ describe('TaskItem', () => {
     )
 
     expect(screen.getByText('Overdue')).toBeInTheDocument()
+  })
+
+  it('shows the priority of the task', () => {
+    render(
+      <TaskItem
+        task={buildTask({ priority: 'HIGH' })}
+        isBusy={false}
+        onToggle={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('High priority')).toBeInTheDocument()
   })
 
   it('calls onToggle when the complete button is pressed', async () => {
