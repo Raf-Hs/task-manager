@@ -343,7 +343,10 @@ npm run test:watch  # modo watch
 | `TaskForm.test.tsx` | Validación del formulario y datos enviados |
 | `TaskItem.test.tsx` | Renderizado, insignias *Overdue* / *Completed* y botones |
 | `TaskList.test.tsx` | Estado de carga y estado vacío |
+| `TasksPage.test.tsx` | Página completa: crear, editar, completar, borrar con confirmación y filtrar |
 | `dateUtils.test.ts` | Helpers de fecha |
+
+**Total: 56 pruebas** (7 ficheros). El backend añade **38 pruebas** (3 suites).
 
 ### Scripts de verificación end-to-end
 
