@@ -25,6 +25,14 @@ spring:
       hibernate:
         format_sql: true
 
+  jackson:
+    mapper:
+      # The enum values are accepted in any case, so `priority: "high"` works
+      # exactly like `priority: "HIGH"`. The query parameters already behaved
+      # this way, and having both paths accept the same values avoids a
+      # confusing difference between filtering and creating a task.
+      accept-case-insensitive-enums: true
+
 server:
   port: ${SERVER_PORT:8080}
   error:

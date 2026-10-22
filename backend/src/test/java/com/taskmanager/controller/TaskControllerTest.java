@@ -340,6 +340,21 @@ class TaskControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/tasks accepts the priority in lower case")
+    void createTaskWithLowerCasePriority() throws Exception {
+        when(taskService.create(any(TaskRequest.class))).thenReturn(sampleResponse());
+
+        mockMvc.perform(post("/api/tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Valid\",\"priority\":\"high\"}"))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<TaskRequest> captor = ArgumentCaptor.forClass(TaskRequest.class);
+        verify(taskService).create(captor.capture());
+        assertThat(captor.getValue().getPriority()).isEqualTo(TaskPriority.HIGH);
+    }
+
+    @Test
     @DisplayName("POST /api/tasks rejects a malformed body with 400")
     void createTaskWithMalformedBody() throws Exception {
         mockMvc.perform(post("/api/tasks")
