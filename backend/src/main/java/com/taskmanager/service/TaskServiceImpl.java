@@ -1,15 +1,20 @@
 package com.taskmanager.service;
 
+import com.taskmanager.dto.TaskFilter;
 import com.taskmanager.dto.TaskRequest;
 import com.taskmanager.dto.TaskResponse;
-import com.taskmanager.dto.TaskStatus;
+import com.taskmanager.dto.TaskStatistics;
 import com.taskmanager.entity.Task;
 import com.taskmanager.exception.TaskNotFoundException;
 import com.taskmanager.mapper.TaskMapper;
 import com.taskmanager.repository.TaskRepository;
+import com.taskmanager.repository.TaskSpecifications;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -22,6 +27,15 @@ import java.util.List;
 @Service
 @Transactional
 public class TaskServiceImpl implements TaskService {
+
+    /**
+     * Default ordering: pending tasks first and, inside each group, the most
+     * recent ones first.
+     */
+    private static final Sort DEFAULT_SORT = Sort.by(
+            Sort.Order.asc("completed"),
+            Sort.Order.desc("createdAt"),
+            Sort.Order.desc("id"));
 
     private final TaskRepository taskRepository;
     private final TaskMapper taskMapper;
@@ -38,14 +52,11 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<TaskResponse> findAll(TaskStatus status) {
-        TaskStatus effectiveStatus = status == null ? TaskStatus.ALL : status;
-        List<Task> tasks = switch (effectiveStatus) {
-            case PENDING -> taskRepository.findByCompletedFalseOrderByCreatedAtDesc();
-            case COMPLETED -> taskRepository.findByCompletedTrueOrderByCreatedAtDesc();
-            case ALL -> taskRepository.findAllByOrderByCompletedAscCreatedAtDesc();
-        };
-        return tasks.stream().map(taskMapper::toResponse).toList();
+    public List<TaskResponse> findAll(TaskFilter filter) {
+        Specification<Task> specification = TaskSpecifications.from(filter);
+        return taskRepository.findAll(specification, DEFAULT_SORT).stream()
+                .map(taskMapper::toResponse)
+                .toList();
     }
 
     @Override
@@ -82,6 +93,21 @@ public class TaskServiceImpl implements TaskService {
     public void delete(Long id) {
         Task task = findTaskOrThrow(id);
         taskRepository.delete(task);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TaskStatistics getStatistics() {
+        long total = taskRepository.count();
+        long completed = taskRepository.countByCompletedTrue();
+        long pending = total - completed;
+        long overdue = taskRepository.countByCompletedFalseAndDueDateBefore(LocalDate.now());
+
+        int completionPercentage = total == 0
+                ? 0
+                : (int) Math.round((completed * 100.0) / total);
+
+        return new TaskStatistics(total, pending, completed, overdue, completionPercentage);
     }
 
     /** Loads a task or fails with a {@link TaskNotFoundException}. */

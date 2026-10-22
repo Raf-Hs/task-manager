@@ -24,8 +24,10 @@ public class TaskMapper {
                 task.getTitle(),
                 task.getDescription(),
                 task.getDueDate(),
+                task.getPriority(),
                 task.isCompleted(),
-                task.getCreatedAt());
+                task.getCreatedAt(),
+                task.getUpdatedAt());
     }
 
     /** Builds a brand new entity out of an incoming request. */
@@ -37,6 +39,7 @@ public class TaskMapper {
                 request.getTitle(),
                 normalize(request.getDescription()),
                 request.getDueDate(),
+                request.getPriority(),
                 request.isCompleted());
     }
 
@@ -45,6 +48,7 @@ public class TaskMapper {
         task.setTitle(request.getTitle());
         task.setDescription(normalize(request.getDescription()));
         task.setDueDate(request.getDueDate());
+        task.setPriority(request.getPriority());
         task.setCompleted(request.isCompleted());
     }
 

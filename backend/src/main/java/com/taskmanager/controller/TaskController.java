@@ -1,7 +1,10 @@
 package com.taskmanager.controller;
 
+import com.taskmanager.dto.TaskFilter;
+import com.taskmanager.dto.TaskPriority;
 import com.taskmanager.dto.TaskRequest;
 import com.taskmanager.dto.TaskResponse;
+import com.taskmanager.dto.TaskStatistics;
 import com.taskmanager.dto.TaskStatus;
 import com.taskmanager.dto.UpdateCompletedRequest;
 import com.taskmanager.service.TaskService;
@@ -45,13 +48,28 @@ public class TaskController {
         this.taskService = taskService;
     }
 
-    @Operation(summary = "List tasks", description = "Returns every task, optionally filtered by status")
+    @Operation(
+            summary = "List tasks",
+            description = "Returns the tasks matching the given filters. The result can be filtered "
+                    + "by status and by priority.")
     @GetMapping
     public ResponseEntity<List<TaskResponse>> list(
             @Parameter(description = "ALL (default), PENDING or COMPLETED")
-            @RequestParam(name = "status", defaultValue = "ALL", required = false) String status) {
-        TaskStatus taskStatus = TaskStatus.from(status);
-        return ResponseEntity.ok(taskService.findAll(taskStatus));
+            @RequestParam(name = "status", defaultValue = "ALL", required = false) String status,
+            @Parameter(description = "HIGH, MEDIUM or LOW")
+            @RequestParam(name = "priority", required = false) String priority) {
+
+        TaskFilter filter = new TaskFilter();
+        filter.setStatus(TaskStatus.from(status));
+        filter.setPriority(parsePriority(priority));
+
+        return ResponseEntity.ok(taskService.findAll(filter));
+    }
+
+    @Operation(summary = "Get task statistics", description = "Aggregated figures of the whole task list")
+    @GetMapping("/statistics")
+    public ResponseEntity<TaskStatistics> statistics() {
+        return ResponseEntity.ok(taskService.getStatistics());
     }
 
     @Operation(summary = "Get a task by id")
@@ -115,5 +133,15 @@ public class TaskController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         taskService.delete(id);
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+    }
+
+    /**
+     * Parses the priority filter. An empty value means "no filter".
+     */
+    private TaskPriority parsePriority(String priority) {
+        if (priority == null || priority.isBlank()) {
+            return null;
+        }
+        return TaskPriority.from(priority);
     }
 }

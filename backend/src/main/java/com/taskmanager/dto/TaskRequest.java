@@ -10,6 +10,9 @@ import java.time.LocalDate;
  *
  * <p>Validation lives in the DTO so the rules are declared exactly once and are
  * applied automatically by Spring MVC through {@code @Valid}.
+ *
+ * <p>The server controlled fields ({@code id}, {@code createdAt},
+ * {@code updatedAt}) are deliberately absent: the client can never set them.
  */
 public class TaskRequest {
 
@@ -23,16 +26,20 @@ public class TaskRequest {
     /** Optional deadline. Past dates are allowed: a task can be overdue. */
     private LocalDate dueDate;
 
+    /** Defaults to {@link TaskPriority#MEDIUM} when the client does not send the field. */
+    private TaskPriority priority;
+
     /** Defaults to {@code false} when the client does not send the field. */
     private boolean completed;
 
     public TaskRequest() {
     }
 
-    public TaskRequest(String title, String description, LocalDate dueDate, boolean completed) {
+    public TaskRequest(String title, String description, LocalDate dueDate, TaskPriority priority, boolean completed) {
         this.title = title;
         this.description = description;
         this.dueDate = dueDate;
+        this.priority = priority;
         this.completed = completed;
     }
 
@@ -58,6 +65,14 @@ public class TaskRequest {
 
     public void setDueDate(LocalDate dueDate) {
         this.dueDate = dueDate;
+    }
+
+    public TaskPriority getPriority() {
+        return priority;
+    }
+
+    public void setPriority(TaskPriority priority) {
+        this.priority = priority;
     }
 
     public boolean isCompleted() {

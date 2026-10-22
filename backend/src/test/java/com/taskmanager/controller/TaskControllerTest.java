@@ -1,14 +1,17 @@
 package com.taskmanager.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.taskmanager.dto.TaskFilter;
+import com.taskmanager.dto.TaskPriority;
 import com.taskmanager.dto.TaskRequest;
 import com.taskmanager.dto.TaskResponse;
-import com.taskmanager.dto.TaskStatus;
+import com.taskmanager.dto.TaskStatistics;
 import com.taskmanager.dto.UpdateCompletedRequest;
 import com.taskmanager.exception.TaskNotFoundException;
 import com.taskmanager.service.TaskService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -20,6 +23,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -59,7 +63,8 @@ class TaskControllerTest {
 
     private TaskResponse sampleResponse() {
         return new TaskResponse(1L, "Buy milk", "Semi skimmed",
-                LocalDate.of(2030, 1, 15), false, Instant.parse("2026-01-01T10:00:00Z"));
+                LocalDate.of(2030, 1, 15), TaskPriority.HIGH, false,
+                Instant.parse("2026-01-01T10:00:00Z"), Instant.parse("2026-01-02T10:00:00Z"));
     }
 
     // ------------------------------------------------------------------
@@ -69,26 +74,43 @@ class TaskControllerTest {
     @Test
     @DisplayName("GET /api/tasks returns the list of tasks")
     void listTasks() throws Exception {
-        when(taskService.findAll(TaskStatus.ALL)).thenReturn(List.of(sampleResponse()));
+        when(taskService.findAll(any(TaskFilter.class))).thenReturn(List.of(sampleResponse()));
 
         mockMvc.perform(get("/api/tasks"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(1)))
                 .andExpect(jsonPath("$[0].id").value(1))
                 .andExpect(jsonPath("$[0].title").value("Buy milk"))
-                .andExpect(jsonPath("$[0].completed").value(false));
+                .andExpect(jsonPath("$[0].completed").value(false))
+                .andExpect(jsonPath("$[0].priority").value("HIGH"))
+                .andExpect(jsonPath("$[0].updatedAt").value("2026-01-02T10:00:00Z"));
     }
 
     @Test
     @DisplayName("GET /api/tasks?status=PENDING filters the pending tasks")
     void listTasksFilteredByStatus() throws Exception {
-        when(taskService.findAll(TaskStatus.PENDING)).thenReturn(List.of());
+        when(taskService.findAll(any(TaskFilter.class))).thenReturn(List.of());
 
         mockMvc.perform(get("/api/tasks").param("status", "PENDING"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(0)));
 
-        verify(taskService).findAll(TaskStatus.PENDING);
+        ArgumentCaptor<TaskFilter> captor = ArgumentCaptor.forClass(TaskFilter.class);
+        verify(taskService).findAll(captor.capture());
+        assertThat(captor.getValue().getStatus().name()).isEqualTo("PENDING");
+    }
+
+    @Test
+    @DisplayName("GET /api/tasks?priority=HIGH filters by priority")
+    void listTasksFilteredByPriority() throws Exception {
+        when(taskService.findAll(any(TaskFilter.class))).thenReturn(List.of(sampleResponse()));
+
+        mockMvc.perform(get("/api/tasks").param("priority", "HIGH"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<TaskFilter> captor = ArgumentCaptor.forClass(TaskFilter.class);
+        verify(taskService).findAll(captor.capture());
+        assertThat(captor.getValue().getPriority()).isEqualTo(TaskPriority.HIGH);
     }
 
     @Test
@@ -98,6 +120,32 @@ class TaskControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").exists());
+    }
+
+    @Test
+    @DisplayName("GET /api/tasks?priority=URGENT returns 400")
+    void listTasksWithInvalidPriority() throws Exception {
+        mockMvc.perform(get("/api/tasks").param("priority", "URGENT"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    // ------------------------------------------------------------------
+    // GET /api/tasks/statistics
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("GET /api/tasks/statistics returns the aggregated figures")
+    void statistics() throws Exception {
+        when(taskService.getStatistics()).thenReturn(new TaskStatistics(10, 6, 4, 2, 40));
+
+        mockMvc.perform(get("/api/tasks/statistics"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(10))
+                .andExpect(jsonPath("$.pending").value(6))
+                .andExpect(jsonPath("$.completed").value(4))
+                .andExpect(jsonPath("$.overdue").value(2))
+                .andExpect(jsonPath("$.completionPercentage").value(40));
     }
 
     // ------------------------------------------------------------------
@@ -114,7 +162,9 @@ class TaskControllerTest {
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.title").value("Buy milk"))
                 .andExpect(jsonPath("$.dueDate").value("2030-01-15"))
-                .andExpect(jsonPath("$.createdAt").value("2026-01-01T10:00:00Z"));
+                .andExpect(jsonPath("$.priority").value("HIGH"))
+                .andExpect(jsonPath("$.createdAt").value("2026-01-01T10:00:00Z"))
+                .andExpect(jsonPath("$.updatedAt").value("2026-01-02T10:00:00Z"));
     }
 
     @Test
@@ -145,7 +195,7 @@ class TaskControllerTest {
     @DisplayName("POST /api/tasks creates a task and returns 201")
     void createTask() throws Exception {
         TaskRequest request = new TaskRequest("Write the report", "Final version",
-                LocalDate.of(2030, 2, 1), false);
+                LocalDate.of(2030, 2, 1), TaskPriority.HIGH, false);
         when(taskService.create(any(TaskRequest.class))).thenReturn(sampleResponse());
 
         mockMvc.perform(post("/api/tasks")
@@ -160,7 +210,7 @@ class TaskControllerTest {
     @Test
     @DisplayName("POST /api/tasks rejects a blank title with 400")
     void createTaskWithBlankTitle() throws Exception {
-        TaskRequest request = new TaskRequest("   ", null, null, false);
+        TaskRequest request = new TaskRequest("   ", null, null, null, false);
 
         mockMvc.perform(post("/api/tasks")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -175,13 +225,23 @@ class TaskControllerTest {
     @Test
     @DisplayName("POST /api/tasks rejects a title longer than 200 characters")
     void createTaskWithTooLongTitle() throws Exception {
-        TaskRequest request = new TaskRequest("a".repeat(201), null, null, false);
+        TaskRequest request = new TaskRequest("a".repeat(201), null, null, null, false);
 
         mockMvc.perform(post("/api/tasks")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors.title").exists());
+    }
+
+    @Test
+    @DisplayName("POST /api/tasks rejects an unknown priority with 400")
+    void createTaskWithInvalidPriority() throws Exception {
+        mockMvc.perform(post("/api/tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Valid\",\"priority\":\"URGENT\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
     }
 
     @Test
@@ -201,7 +261,7 @@ class TaskControllerTest {
     @Test
     @DisplayName("PUT /api/tasks/{id} updates the task")
     void updateTask() throws Exception {
-        TaskRequest request = new TaskRequest("Updated title", null, null, true);
+        TaskRequest request = new TaskRequest("Updated title", null, null, TaskPriority.LOW, true);
         when(taskService.update(eq(1L), any(TaskRequest.class))).thenReturn(sampleResponse());
 
         mockMvc.perform(put("/api/tasks/1")
@@ -214,7 +274,7 @@ class TaskControllerTest {
     @Test
     @DisplayName("PUT /api/tasks/{id} returns 404 when the task does not exist")
     void updateTaskNotFound() throws Exception {
-        TaskRequest request = new TaskRequest("Updated title", null, null, false);
+        TaskRequest request = new TaskRequest("Updated title", null, null, null, false);
         when(taskService.update(eq(99L), any(TaskRequest.class)))
                 .thenThrow(new TaskNotFoundException(99L));
 
@@ -228,7 +288,7 @@ class TaskControllerTest {
     @Test
     @DisplayName("PUT /api/tasks/{id} validates the payload")
     void updateTaskValidatesPayload() throws Exception {
-        TaskRequest request = new TaskRequest("", null, null, false);
+        TaskRequest request = new TaskRequest("", null, null, null, false);
 
         mockMvc.perform(put("/api/tasks/1")
                         .contentType(MediaType.APPLICATION_JSON)

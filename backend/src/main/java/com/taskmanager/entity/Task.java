@@ -1,11 +1,15 @@
 package com.taskmanager.entity;
 
+import com.taskmanager.dto.TaskPriority;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
@@ -36,29 +40,47 @@ public class Task {
     @Column(name = "due_date")
     private LocalDate dueDate;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private TaskPriority priority;
+
     @Column(nullable = false)
     private boolean completed;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
     protected Task() {
         // Required by JPA.
     }
 
-    public Task(String title, String description, LocalDate dueDate, boolean completed) {
+    public Task(String title, String description, LocalDate dueDate, TaskPriority priority, boolean completed) {
         this.title = title;
         this.description = description;
         this.dueDate = dueDate;
+        this.priority = priority == null ? TaskPriority.MEDIUM : priority;
         this.completed = completed;
     }
 
     /** Sets the creation timestamp right before the first INSERT. */
     @PrePersist
     void onCreate() {
+        Instant now = Instant.now();
         if (createdAt == null) {
-            createdAt = Instant.now();
+            createdAt = now;
         }
+        if (updatedAt == null) {
+            updatedAt = now;
+        }
+    }
+
+    /** Refreshes the modification timestamp right before every UPDATE. */
+    @PreUpdate
+    void onUpdate() {
+        this.updatedAt = Instant.now();
     }
 
     public Long getId() {
@@ -93,6 +115,14 @@ public class Task {
         this.dueDate = dueDate;
     }
 
+    public TaskPriority getPriority() {
+        return priority;
+    }
+
+    public void setPriority(TaskPriority priority) {
+        this.priority = priority == null ? TaskPriority.MEDIUM : priority;
+    }
+
     public boolean isCompleted() {
         return completed;
     }
@@ -107,5 +137,13 @@ public class Task {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(Instant updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

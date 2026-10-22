@@ -1,8 +1,11 @@
 package com.taskmanager.service;
 
+import com.taskmanager.dto.TaskFilter;
+import com.taskmanager.dto.TaskPriority;
 import com.taskmanager.dto.TaskRequest;
 import com.taskmanager.dto.TaskResponse;
 import com.taskmanager.dto.TaskStatus;
+import com.taskmanager.dto.TaskStatistics;
 import com.taskmanager.entity.Task;
 import com.taskmanager.exception.TaskNotFoundException;
 import com.taskmanager.mapper.TaskMapper;
@@ -14,6 +17,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -53,61 +58,73 @@ class TaskServiceImplTest {
     @BeforeEach
     void setUp() {
         taskService = new TaskServiceImpl(taskRepository, taskMapper);
-        existingTask = new Task("Buy milk", "Semi skimmed", LocalDate.of(2030, 1, 15), false);
+        existingTask = new Task("Buy milk", "Semi skimmed", LocalDate.of(2030, 1, 15),
+                TaskPriority.MEDIUM, false);
         existingTask.setId(1L);
         existingTask.setCreatedAt(Instant.parse("2026-01-01T10:00:00Z"));
+        existingTask.setUpdatedAt(Instant.parse("2026-01-01T10:00:00Z"));
     }
+
+    // ------------------------------------------------------------------
+    // Listing
+    // ------------------------------------------------------------------
 
     @Test
     @DisplayName("findAll returns every task when no filter is applied")
     void findAllReturnsEveryTask() {
-        when(taskRepository.findAllByOrderByCompletedAscCreatedAtDesc()).thenReturn(List.of(existingTask));
+        when(taskRepository.findAll(any(Specification.class), any(Sort.class)))
+                .thenReturn(List.of(existingTask));
 
-        List<TaskResponse> result = taskService.findAll(TaskStatus.ALL);
+        List<TaskResponse> result = taskService.findAll(new TaskFilter());
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getId()).isEqualTo(1L);
         assertThat(result.get(0).getTitle()).isEqualTo("Buy milk");
         assertThat(result.get(0).getDueDate()).isEqualTo(LocalDate.of(2030, 1, 15));
-        verify(taskRepository, times(1)).findAllByOrderByCompletedAscCreatedAtDesc();
+        assertThat(result.get(0).getPriority()).isEqualTo(TaskPriority.MEDIUM);
+        verify(taskRepository, times(1)).findAll(any(Specification.class), any(Sort.class));
     }
 
     @Test
-    @DisplayName("findAll filters the pending tasks")
-    void findAllFiltersPendingTasks() {
-        when(taskRepository.findByCompletedFalseOrderByCreatedAtDesc()).thenReturn(List.of(existingTask));
+    @DisplayName("findAll returns an empty list when there are no tasks")
+    void findAllReturnsEmptyList() {
+        when(taskRepository.findAll(any(Specification.class), any(Sort.class))).thenReturn(List.of());
 
-        List<TaskResponse> result = taskService.findAll(TaskStatus.PENDING);
-
-        assertThat(result).hasSize(1);
-        verify(taskRepository, times(1)).findByCompletedFalseOrderByCreatedAtDesc();
-        verify(taskRepository, never()).findAllByOrderByCompletedAscCreatedAtDesc();
+        assertThat(taskService.findAll(new TaskFilter())).isEmpty();
     }
 
     @Test
-    @DisplayName("findAll filters the completed tasks")
-    void findAllFiltersCompletedTasks() {
-        Task completed = new Task("Already done", null, null, true);
-        completed.setId(2L);
-        when(taskRepository.findByCompletedTrueOrderByCreatedAtDesc()).thenReturn(List.of(completed));
+    @DisplayName("findAll keeps the pending tasks before the completed ones")
+    void findAllKeepsPendingFirst() {
+        when(taskRepository.findAll(any(Specification.class), any(Sort.class)))
+                .thenReturn(List.of(existingTask));
 
-        List<TaskResponse> result = taskService.findAll(TaskStatus.COMPLETED);
+        taskService.findAll(new TaskFilter());
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).isCompleted()).isTrue();
-        verify(taskRepository, times(1)).findByCompletedTrueOrderByCreatedAtDesc();
+        ArgumentCaptor<Sort> captor = ArgumentCaptor.forClass(Sort.class);
+        verify(taskRepository).findAll(any(Specification.class), captor.capture());
+
+        Sort.Order byCompleted = captor.getValue().getOrderFor("completed");
+        assertThat(byCompleted).isNotNull();
+        assertThat(byCompleted.isAscending()).isTrue();
     }
 
     @Test
-    @DisplayName("findAll falls back to every task when no status is given")
-    void findAllWithoutStatus() {
-        when(taskRepository.findAllByOrderByCompletedAscCreatedAtDesc()).thenReturn(List.of(existingTask));
+    @DisplayName("findAll applies the status filter")
+    void findAllAppliesStatusFilter() {
+        when(taskRepository.findAll(any(Specification.class), any(Sort.class))).thenReturn(List.of());
 
-        List<TaskResponse> result = taskService.findAll(null);
+        TaskFilter filter = new TaskFilter();
+        filter.setStatus(TaskStatus.PENDING);
 
-        assertThat(result).hasSize(1);
-        verify(taskRepository, times(1)).findAllByOrderByCompletedAscCreatedAtDesc();
+        taskService.findAll(filter);
+
+        verify(taskRepository).findAll(any(Specification.class), any(Sort.class));
     }
+
+    // ------------------------------------------------------------------
+    // Reading a single task
+    // ------------------------------------------------------------------
 
     @Test
     @DisplayName("findById returns the requested task")
@@ -118,6 +135,7 @@ class TaskServiceImplTest {
 
         assertThat(result.getId()).isEqualTo(1L);
         assertThat(result.isCompleted()).isFalse();
+        assertThat(result.getPriority()).isEqualTo(TaskPriority.MEDIUM);
     }
 
     @Test
@@ -130,11 +148,15 @@ class TaskServiceImplTest {
                 .hasMessageContaining("99");
     }
 
+    // ------------------------------------------------------------------
+    // Creating
+    // ------------------------------------------------------------------
+
     @Test
     @DisplayName("create persists the task and returns it")
     void createPersistsTask() {
         TaskRequest request = new TaskRequest("Write the report", "Final version",
-                LocalDate.of(2030, 2, 1), false);
+                LocalDate.of(2030, 2, 1), TaskPriority.HIGH, false);
         when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> {
             Task saved = invocation.getArgument(0);
             saved.setId(10L);
@@ -148,6 +170,7 @@ class TaskServiceImplTest {
         verify(taskRepository, times(1)).save(captor.capture());
         assertThat(captor.getValue().getTitle()).isEqualTo("Write the report");
         assertThat(captor.getValue().getDescription()).isEqualTo("Final version");
+        assertThat(captor.getValue().getPriority()).isEqualTo(TaskPriority.HIGH);
         assertThat(result.getId()).isEqualTo(10L);
         assertThat(result.getCreatedAt()).isNotNull();
     }
@@ -155,7 +178,7 @@ class TaskServiceImplTest {
     @Test
     @DisplayName("create stores an empty description as null")
     void createNormalizesBlankDescription() {
-        TaskRequest request = new TaskRequest("Only a title", "   ", null, false);
+        TaskRequest request = new TaskRequest("Only a title", "   ", null, null, false);
         when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         taskService.create(request);
@@ -166,9 +189,25 @@ class TaskServiceImplTest {
     }
 
     @Test
+    @DisplayName("create applies the medium priority when none is given")
+    void createAppliesDefaultPriority() {
+        TaskRequest request = new TaskRequest("No priority", null, null, null, false);
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskResponse result = taskService.create(request);
+
+        assertThat(result.getPriority()).isEqualTo(TaskPriority.MEDIUM);
+    }
+
+    // ------------------------------------------------------------------
+    // Updating
+    // ------------------------------------------------------------------
+
+    @Test
     @DisplayName("update modifies the existing task")
     void updateModifiesTask() {
-        TaskRequest request = new TaskRequest("Updated title", "Updated description", null, true);
+        TaskRequest request = new TaskRequest("Updated title", "Updated description", null,
+                TaskPriority.LOW, true);
         when(taskRepository.findById(1L)).thenReturn(Optional.of(existingTask));
         when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -179,6 +218,7 @@ class TaskServiceImplTest {
         assertThat(captor.getValue().getTitle()).isEqualTo("Updated title");
         assertThat(captor.getValue().getDescription()).isEqualTo("Updated description");
         assertThat(captor.getValue().isCompleted()).isTrue();
+        assertThat(captor.getValue().getPriority()).isEqualTo(TaskPriority.LOW);
         assertThat(result.getTitle()).isEqualTo("Updated title");
     }
 
@@ -186,12 +226,16 @@ class TaskServiceImplTest {
     @DisplayName("update fails when the task does not exist")
     void updateFailsWhenMissing() {
         when(taskRepository.findById(99L)).thenReturn(Optional.empty());
-        TaskRequest request = new TaskRequest("Title", null, null, false);
+        TaskRequest request = new TaskRequest("Title", null, null, null, false);
 
         assertThatThrownBy(() -> taskService.update(99L, request))
                 .isInstanceOf(TaskNotFoundException.class);
         verify(taskRepository, never()).save(any(Task.class));
     }
+
+    // ------------------------------------------------------------------
+    // Changing the completion status
+    // ------------------------------------------------------------------
 
     @Test
     @DisplayName("changeCompletedStatus toggles the status when no target is given")
@@ -229,6 +273,10 @@ class TaskServiceImplTest {
         verify(taskRepository, never()).save(any(Task.class));
     }
 
+    // ------------------------------------------------------------------
+    // Deleting
+    // ------------------------------------------------------------------
+
     @Test
     @DisplayName("delete removes the task")
     void deleteRemovesTask() {
@@ -256,5 +304,53 @@ class TaskServiceImplTest {
 
         assertThatThrownBy(() -> taskService.delete(42L)).isInstanceOf(TaskNotFoundException.class);
         verify(taskRepository, never()).delete(any(Task.class));
+    }
+
+    // ------------------------------------------------------------------
+    // Statistics
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("getStatistics aggregates the figures of the list")
+    void getStatisticsAggregatesFigures() {
+        when(taskRepository.count()).thenReturn(10L);
+        when(taskRepository.countByCompletedTrue()).thenReturn(4L);
+        when(taskRepository.countByCompletedFalseAndDueDateBefore(any(LocalDate.class))).thenReturn(2L);
+
+        TaskStatistics statistics = taskService.getStatistics();
+
+        assertThat(statistics.getTotal()).isEqualTo(10);
+        assertThat(statistics.getCompleted()).isEqualTo(4);
+        assertThat(statistics.getPending()).isEqualTo(6);
+        assertThat(statistics.getOverdue()).isEqualTo(2);
+        assertThat(statistics.getCompletionPercentage()).isEqualTo(40);
+    }
+
+    @Test
+    @DisplayName("getStatistics returns zeroed figures when the list is empty")
+    void getStatisticsHandlesEmptyList() {
+        when(taskRepository.count()).thenReturn(0L);
+        when(taskRepository.countByCompletedTrue()).thenReturn(0L);
+        when(taskRepository.countByCompletedFalseAndDueDateBefore(any(LocalDate.class))).thenReturn(0L);
+
+        TaskStatistics statistics = taskService.getStatistics();
+
+        assertThat(statistics.getTotal()).isZero();
+        assertThat(statistics.getPending()).isZero();
+        assertThat(statistics.getCompleted()).isZero();
+        assertThat(statistics.getCompletionPercentage()).isZero();
+    }
+
+    // ------------------------------------------------------------------
+    // Filter helpers
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("TaskFilter defaults to the ALL status")
+    void taskFilterDefaultsToAll() {
+        TaskFilter filter = new TaskFilter();
+
+        assertThat(filter.getStatus()).isEqualTo(TaskStatus.ALL);
+        assertThat(filter.getPriority()).isNull();
     }
 }
