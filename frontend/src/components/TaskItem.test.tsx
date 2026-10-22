@@ -67,8 +67,7 @@ describe('TaskItem', () => {
     expect(onToggle).toHaveBeenCalledTimes(1)
   })
 
-  it('offers to mark a completed task as pending', async () => {
-    const user = userEvent.setup()
+  it('offers to mark a completed task as pending', () => {
     render(
       <TaskItem
         task={buildTask({ completed: true })}
