@@ -23,6 +23,7 @@ dist-ssr/
 *.local
 .vite/
 coverage/
+*.tsbuildinfo
 
 # Logs
 *.log
