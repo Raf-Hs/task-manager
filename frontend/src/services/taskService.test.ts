@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Mock } from 'vitest'
 import { apiClient } from './api'
 import {
   changeTaskStatus,
@@ -21,7 +22,15 @@ vi.mock('./api', () => ({
   getErrorMessage: vi.fn(),
 }))
 
-const mockedClient = vi.mocked(apiClient)
+// The Axios client is replaced by plain mock functions above. The cast tells
+// TypeScript that the methods are mocks, so they expose the matchers of Vitest.
+const mockedClient = apiClient as unknown as {
+  get: Mock
+  post: Mock
+  put: Mock
+  patch: Mock
+  delete: Mock
+}
 
 const sampleTask: Task = {
   id: 1,
