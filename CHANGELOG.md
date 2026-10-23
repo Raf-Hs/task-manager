@@ -16,19 +16,27 @@ siguiente versión cuando se decide publicarla.
 
 ### Añadido
 
-- _Pendiente_
+- `docs/API.md`: referencia completa de los siete endpoints, con ejemplos de
+  petición y respuesta y la tabla de errores.
+- `docs/DATABASE.md`: el modelo de datos, los índices, las consultas de
+  estadísticas y la copia de seguridad.
 
 ### Cambiado
 
-- _Pendiente_
+- Los valores de `status`, `priority` y `sort` se aceptan en mayúsculas o en
+  minúsculas, tanto en la URL como en el cuerpo JSON.
 
 ### Corregido
 
-- _Pendiente_
+- El orden por prioridad ya no es alfabético: `HIGH` va antes que `MEDIUM`, que
+  va antes que `LOW`. Antes el texto se ordenaba tal cual y la tarea más
+  urgente quedaba en medio de la lista.
+- `scripts/api-smoke-test.sh` borra las tareas que crea, así que se puede
+  ejecutar tantas veces como se quiera y la base de datos queda como estaba.
 
 ### Eliminado
 
-- _Pendiente_
+- _Nada por ahora._
 
 ---
 
@@ -72,7 +80,7 @@ tareas personales.
 
 - `docker-compose.yml` con PostgreSQL 17 y su `healthcheck`.
 - `.env.example` con todas las variables de entorno y sin credenciales reales.
-- Scripts `api-smoke-test.sh` (49 comprobaciones) y `e2e-test.sh`
+- Scripts `api-smoke-test.sh` (50 comprobaciones) y `e2e-test.sh`
   (26 comprobaciones).
 - `docs/SCOPE.md` con el alcance, las personas usuarias, las historias de
   usuario y los criterios de aceptación.
