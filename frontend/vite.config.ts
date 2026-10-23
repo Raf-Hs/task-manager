@@ -21,5 +21,9 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/test/setup.ts',
     css: false,
+    // Components that wait for a debounce need a bit of slack. The default
+    // of 5 s is too tight when the whole suite runs in parallel on a busy
+    // machine, and a slow test is not a broken test.
+    testTimeout: 15000,
   },
 })
