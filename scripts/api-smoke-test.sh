@@ -21,6 +21,17 @@ check() {
 status() { curl -sS -o /dev/null -w '%{http_code}' "$@"; }
 body() { curl -sS "$@"; }
 
+# Sends a request and records both the body and the status, so one call can
+# check the code and still keep the id of the resource it created.
+LAST_BODY=""
+LAST_STATUS=""
+request() {
+  local output
+  output=$(curl -sS -w '\n%{http_code}' "$@")
+  LAST_STATUS="${output##*$'\n'}"
+  LAST_BODY="${output%$'\n'*}"
+}
+
 echo "=============================================="
 echo " Task Manager API smoke test - $BASE"
 echo "=============================================="
@@ -38,14 +49,18 @@ CREATED=$(body -X POST "$BASE/api/tasks" -H 'Content-Type: application/json' \
 ID=$(echo "$CREATED" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
 check "POST /api/tasks creates a task" "Buy milk" "$(echo "$CREATED" | sed -n 's/.*"title":"\([^"]*\)".*/\1/p')"
 check "POST /api/tasks returns the generated id" "yes" "$([ -n "$ID" ] && echo yes || echo no)"
-check "POST /api/tasks returns 201" "201" "$(status -X POST "$BASE/api/tasks" -H 'Content-Type: application/json' -d '{"title":"Second task"}')"
+request -X POST "$BASE/api/tasks" -H 'Content-Type: application/json' -d '{"title":"Second task"}'
+SECOND_ID=$(echo "$LAST_BODY" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
+check "POST /api/tasks returns 201" "201" "$LAST_STATUS"
 
 echo ""
 echo "-- Validation --"
 check "POST with a blank title returns 400" "400" "$(status -X POST "$BASE/api/tasks" -H 'Content-Type: application/json' -d '{"title":"   "}')"
 check "POST with a title over 200 chars returns 400" "400" "$(status -X POST "$BASE/api/tasks" -H 'Content-Type: application/json' -d "{\"title\":\"$(printf 'a%.0s' {1..201})\"}")"
 check "POST with a malformed body returns 400" "400" "$(status -X POST "$BASE/api/tasks" -H 'Content-Type: application/json' -d '{ nope }')"
-check "POST with an unknown field is ignored" "201" "$(status -X POST "$BASE/api/tasks" -H 'Content-Type: application/json' -d '{"title":"Extra field","unknown":"x"}')"
+request -X POST "$BASE/api/tasks" -H 'Content-Type: application/json' -d '{"title":"Extra field","unknown":"x"}'
+EXTRA_ID=$(echo "$LAST_BODY" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
+check "POST with an unknown field is ignored" "201" "$LAST_STATUS"
 
 echo ""
 echo "-- Read --"
@@ -68,8 +83,15 @@ check "GET /api/tasks?status=UNKNOWN returns 400" "400" "$(status "$BASE/api/tas
 
 echo ""
 echo "-- Priority --"
-check "POST with a priority returns it" "HIGH" "$(body -X POST "$BASE/api/tasks" -H 'Content-Type: application/json' -d '{"title":"Urgent one","priority":"HIGH"}' | sed -n 's/.*"priority":"\([^"]*\)".*/\1/p')"
-check "POST without a priority returns MEDIUM" "MEDIUM" "$(body -X POST "$BASE/api/tasks" -H 'Content-Type: application/json' -d '{"title":"Normal one"}' | sed -n 's/.*"priority":"\([^"]*\)".*/\1/p')"
+# A unique suffix keeps this run's tasks apart from any other task that
+# happens to have the same title.
+RUN_TAG="smoke-$$"
+URGENT=$(body -X POST "$BASE/api/tasks" -H 'Content-Type: application/json' -d "{\"title\":\"Urgent $RUN_TAG\",\"priority\":\"HIGH\"}")
+URGENT_ID=$(echo "$URGENT" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
+check "POST with a priority returns it" "HIGH" "$(echo "$URGENT" | sed -n 's/.*"priority":"\([^"]*\)".*/\1/p')"
+NORMAL=$(body -X POST "$BASE/api/tasks" -H 'Content-Type: application/json' -d "{\"title\":\"Normal $RUN_TAG\"}")
+NORMAL_ID=$(echo "$NORMAL" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
+check "POST without a priority returns MEDIUM" "MEDIUM" "$(echo "$NORMAL" | sed -n 's/.*"priority":"\([^"]*\)".*/\1/p')"
 check "POST with an unknown priority returns 400" "400" "$(status -X POST "$BASE/api/tasks" -H 'Content-Type: application/json' -d '{"title":"Broken","priority":"URGENT"}')"
 check "GET /api/tasks?priority=HIGH returns 200" "200" "$(status "$BASE/api/tasks?priority=HIGH")"
 check "GET /api/tasks?priority=URGENT returns 400" "400" "$(status "$BASE/api/tasks?priority=URGENT")"
@@ -87,6 +109,14 @@ check "GET /api/tasks?sort=random returns 400" "400" "$(status "$BASE/api/tasks?
 check "GET /api/tasks?page=0&size=2 returns 200" "200" "$(status "$BASE/api/tasks?page=0&size=2")"
 check "GET /api/tasks?size=2 limits the page" "2" "$(body "$BASE/api/tasks?page=0&size=2" | grep -o '"size":[0-9]*' | head -1 | sed 's/.*://')"
 check "GET /api/tasks?size=500 clamps the size to 100" "100" "$(body "$BASE/api/tasks?page=0&size=500" | grep -o '"size":[0-9]*' | head -1 | sed 's/.*://')"
+
+echo ""
+echo "-- Priority ordering --"
+# The most urgent priority must come first, not the alphabetically first one.
+ORDERED_IDS=$(body "$BASE/api/tasks?sort=PRIORITY&size=100" | grep -o '"id":[0-9]*' | sed 's/.*://')
+HIGH_POS=$(echo "$ORDERED_IDS" | grep -n "^$URGENT_ID$" | cut -d: -f1 | head -1)
+LOW_POS=$(echo "$ORDERED_IDS" | grep -n "^$NORMAL_ID$" | cut -d: -f1 | head -1)
+check "sort=PRIORITY puts HIGH before MEDIUM and LOW" "true" "$([ -n "$HIGH_POS" ] && [ -n "$LOW_POS" ] && [ "$HIGH_POS" -lt "$LOW_POS" ] && echo true || echo false)"
 
 echo ""
 echo "-- Statistics --"
@@ -124,6 +154,17 @@ echo ""
 echo "-- Documentation --"
 check "GET /v3/api-docs returns 200" "200" "$(status "$BASE/v3/api-docs")"
 check "GET /swagger-ui/index.html returns 200" "200" "$(status "$BASE/swagger-ui/index.html")"
+
+echo ""
+echo "-- Cleanup --"
+# Delete only the tasks this script created, so the database is left as it
+# was found and the smoke test can be run again and again.
+for task_id in "$ID" "$SECOND_ID" "$PENDING_ID" "$DONE_ID" "$URGENT_ID" "$NORMAL_ID" "$EXTRA_ID"; do
+  if [ -n "$task_id" ]; then
+    curl -sS -o /dev/null -X DELETE "$BASE/api/tasks/$task_id"
+  fi
+done
+echo "  The tasks created by this script were deleted."
 
 echo ""
 echo "=============================================="
