@@ -2,6 +2,7 @@ package com.taskmanager.repository;
 
 import com.taskmanager.dto.TaskFilter;
 import com.taskmanager.dto.TaskPriority;
+import com.taskmanager.dto.TaskSortOption;
 import com.taskmanager.dto.TaskStatus;
 import com.taskmanager.entity.Task;
 import org.junit.jupiter.api.DisplayName;
@@ -12,6 +13,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDate;
@@ -188,5 +190,56 @@ class TaskRepositoryTest {
         entityManager.clear();
 
         assertThat(taskRepository.findById(task.getId())).isEmpty();
+    }
+
+    // ------------------------------------------------------------------
+    // Ordering
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Sorting by priority shows the most urgent tasks first")
+    void sortByPriorityShowsTheUrgentTasksFirst() {
+        givenTask("Low", TaskPriority.LOW, null, false);
+        givenTask("Medium", TaskPriority.MEDIUM, null, false);
+        givenTask("High", TaskPriority.HIGH, null, false);
+        entityManager.flush();
+
+        List<Task> result = findAllOrderedBy(TaskSortOption.PRIORITY);
+
+        assertThat(result).extracting(Task::getPriority)
+                .containsExactly(TaskPriority.HIGH, TaskPriority.MEDIUM, TaskPriority.LOW);
+    }
+
+    @Test
+    @DisplayName("Sorting by title is alphabetical")
+    void sortByTitleIsAlphabetical() {
+        givenTask("Bananas", TaskPriority.MEDIUM, null, false);
+        givenTask("Apples", TaskPriority.MEDIUM, null, false);
+        givenTask("Cherries", TaskPriority.MEDIUM, null, false);
+        entityManager.flush();
+
+        List<Task> result = findAllOrderedBy(TaskSortOption.TITLE);
+
+        assertThat(result).extracting(Task::getTitle)
+                .containsExactly("Apples", "Bananas", "Cherries");
+    }
+
+    @Test
+    @DisplayName("The completed tasks are always pushed to the end of the list")
+    void completedTasksAreAlwaysLast() {
+        givenTask("Done", TaskPriority.HIGH, null, true);
+        givenTask("Pending", TaskPriority.LOW, null, false);
+        entityManager.flush();
+
+        List<Task> result = findAllOrderedBy(TaskSortOption.PRIORITY);
+
+        assertThat(result).extracting(Task::getTitle).containsExactly("Pending", "Done");
+    }
+
+    /** Runs the same query the service runs, with the given ordering. */
+    private List<Task> findAllOrderedBy(TaskSortOption option) {
+        Specification<Task> specification = TaskSpecifications.from(new TaskFilter())
+                .and(TaskSpecifications.orderedBy(option));
+        return taskRepository.findAll(specification, PageRequest.of(0, 10)).getContent();
     }
 }

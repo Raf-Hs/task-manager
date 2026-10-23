@@ -48,21 +48,34 @@ la paginación**, independientemente del tamaño de la tabla.
 
 ### Negativas
 
-- `JpaSpecification` es más Heavy que un método derivado: para un filtro
-  simple, un método derivado se lee mejor. Se usa `Specification` **solo**
-  cuando la búsqueda por texto está activa, de modo que el camino común
-  (filtro por estado) sigue siendo un método derivado legible.
+- `JpaSpecification` es más verbosa que un método derivado: para un filtro
+  simple, un método derivado se lee mejor. Se acepta ese coste porque el
+  filtro y el orden se combinan libremente y el mismo código sirve para todas
+  las combinaciones.
 - Las especificaciones con criterios dinámicos requieren más cuidado al
   probarlas: hay que verificar la consulta generada, no solo el resultado.
+  Por eso el orden se prueba contra una base de datos real
+  (`TaskRepositoryTest`).
 - `Pageable` es un concepto más rico que un `List` simple: hay que decidir
   explícitamente el número de página y de elementos.
+- El orden no se puede expresar con un `Sort` de Spring Data cuando algún
+  criterio no es una columna. Ordenar por prioridad necesita una expresión
+  `CASE` (el texto `HIGH`, `MEDIUM`, `LOW` no se ordena como uno espera), así
+  que el `ORDER BY` se construye con la API de `Criteria` dentro de la
+  especificación. La consecuencia práctica es que el `Pageable` viaja **sin**
+  orden: un `Sort` en el `Pageable` reemplazaría el orden de la
+  especificación.
 
 ## Alternativas consideradas
 
 - **Filtrar en memoria:** sencillo, pero incorrecto. Transferiría toda la
   tabla al servidor de aplicación para descartar la mayor parte, y el
   consumo de memoria crecería sin límite.
-- **JPQL handwritten:** más verboso que los métodos derivados y menos
+- **JPQL escrito a mano:** más verboso que los métodos derivados y menos
   seguro frente a errores de concatenación.
 - **`@Query` con parámetros opcionales:** no permite componer criterios de
-  forma dinámica sin consultas muyverages.
+  forma dinámica sin consultas muy enrevesadas.
+- **Ordenar por prioridad con `JpaSort.unsafe`:** Spring Data lo admite para
+  consultas JPQL, pero no cuando la consulta se construye con `Criteria`
+  (`findAll(Specification, Pageable)`), que es el caso. Por eso la expresión
+  se escribe con `CriteriaBuilder`.

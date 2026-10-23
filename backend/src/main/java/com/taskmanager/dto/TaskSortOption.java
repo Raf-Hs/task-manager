@@ -3,9 +3,10 @@ package com.taskmanager.dto;
 /**
  * Criteria available to sort the task list.
  *
- * <p>Each option knows how to translate itself into a Spring Data
- * {@code Sort} property, which keeps the mapping in one place instead of
- * spreading it across the controller and the service.
+ * <p>Each option knows the entity property it sorts by, which keeps the
+ * mapping in one place instead of spreading it across the controller and the
+ * service. The direction and the special cases (priority) are resolved in
+ * {@code TaskSpecifications}.
  */
 public enum TaskSortOption {
 

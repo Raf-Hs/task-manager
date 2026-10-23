@@ -230,9 +230,19 @@ curl "http://localhost:8080/api/tasks?sort=TITLE&page=2&size=10"
 | --- | --- |
 | `400` | `status`, `priority` o `sort` con un valor que no existe. |
 
-> **Orden por defecto.** Las tareas pendientes se muestran siempre antes que
-> las completadas, sea cual sea el criterio. El identificador actúa como
-> desempate, así que dos peticiones iguales devuelven el mismo orden.
+> **Cómo se ordena.** Las tareas pendientes se muestran siempre antes que las
+> completadas, sea cual sea el criterio. Después se aplica el criterio pedido:
+>
+> | `sort` | Orden |
+> | --- | --- |
+> | `CREATED_AT` | Más reciente primero. |
+> | `UPDATED_AT` | Modificada más recientemente primero. |
+> | `DUE_DATE` | Fecha límite más cercana primero. |
+> | `TITLE` | Alfabético. |
+> | `PRIORITY` | De más urgente a menos urgente (`HIGH`, `MEDIUM`, `LOW`). |
+>
+> El identificador actúa como último desempate, así que dos peticiones iguales
+> devuelven siempre el mismo orden.
 
 ---
 
@@ -437,7 +447,7 @@ Estas reglas están implementadas en la capa de servicio y cubiertas por tests.
 Con el backend levantado:
 
 ```bash
-bash scripts/api-smoke-test.sh   # 49 comprobaciones sobre esta referencia
+bash scripts/api-smoke-test.sh   # 50 comprobaciones sobre esta referencia
 ```
 
 El script cubre los siete endpoints, los códigos de estado, los mensajes de

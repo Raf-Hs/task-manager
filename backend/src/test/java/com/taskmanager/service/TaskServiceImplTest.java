@@ -22,7 +22,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.Instant;
@@ -104,8 +103,8 @@ class TaskServiceImplTest {
     }
 
     @Test
-    @DisplayName("findAll keeps the pending tasks before the completed ones")
-    void findAllKeepsPendingFirst() {
+    @DisplayName("findAll leaves the ordering to the specification")
+    void findAllLeavesTheOrderingToTheSpecification() {
         when(taskRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(existingTask)));
 
@@ -114,54 +113,10 @@ class TaskServiceImplTest {
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
         verify(taskRepository).findAll(any(Specification.class), captor.capture());
 
-        Sort.Order byCompleted = captor.getValue().getSort().getOrderFor("completed");
-        assertThat(byCompleted).isNotNull();
-        assertThat(byCompleted.isAscending()).isTrue();
-    }
-
-    @Test
-    @DisplayName("findAll sorts by title in ascending order")
-    void findAllSortsByTitleAscending() {
-        when(taskRepository.findAll(any(Specification.class), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(existingTask)));
-
-        taskService.findAll(new TaskFilter(), TaskSortOption.TITLE, PageRequest.of(0, 20));
-
-        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(taskRepository).findAll(any(Specification.class), captor.capture());
-
-        Sort.Order byTitle = captor.getValue().getSort().getOrderFor("title");
-        assertThat(byTitle).isNotNull();
-        assertThat(byTitle.isAscending()).isTrue();
-    }
-
-    @Test
-    @DisplayName("findAll sorts by creation date in descending order")
-    void findAllSortsByCreatedAtDescending() {
-        when(taskRepository.findAll(any(Specification.class), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(existingTask)));
-
-        taskService.findAll(new TaskFilter(), TaskSortOption.CREATED_AT, PageRequest.of(0, 20));
-
-        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(taskRepository).findAll(any(Specification.class), captor.capture());
-
-        Sort.Order byCreatedAt = captor.getValue().getSort().getOrderFor("createdAt");
-        assertThat(byCreatedAt).isNotNull();
-        assertThat(byCreatedAt.isAscending()).isFalse();
-    }
-
-    @Test
-    @DisplayName("findAll falls back to the creation date when no criterion is given")
-    void findAllFallsBackToDefaultSort() {
-        when(taskRepository.findAll(any(Specification.class), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(existingTask)));
-
-        taskService.findAll(new TaskFilter(), null, PageRequest.of(0, 20));
-
-        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(taskRepository).findAll(any(Specification.class), captor.capture());
-        assertThat(captor.getValue().getSort().getOrderFor("createdAt")).isNotNull();
+        // A sort on the pageable would replace the ordering built by the
+        // specification, so the pageable must not carry one. The ordering
+        // itself is covered by TaskRepositoryTest, against a real database.
+        assertThat(captor.getValue().getSort().isUnsorted()).isTrue();
     }
 
     @Test
