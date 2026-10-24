@@ -43,6 +43,16 @@ server:
   error:
     include-message: always
 
+# Spring Boot Actuator - health, info and application metrics
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
 # Custom application settings
 app:
   cors:

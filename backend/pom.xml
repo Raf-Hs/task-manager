@@ -65,6 +65,12 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
+        <!-- Production-ready monitoring and health checks -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <!-- Lombok removed on purpose: explicit getters/setters keep the code
              readable for anyone opening the project for the first time. -->
 
