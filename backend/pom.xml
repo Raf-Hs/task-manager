@@ -55,6 +55,16 @@
             <version>${springdoc.version}</version>
         </dependency>
 
+        <!-- Database migrations -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
         <!-- Lombok removed on purpose: explicit getters/setters keep the code
              readable for anyone opening the project for the first time. -->
 
